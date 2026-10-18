@@ -62,7 +62,9 @@
 #include "cm93.h"  // for chart outline draw
 #include "go_to_position_dlg.h"
 #include "kml.h"
+#include "logbook.h"
 #include "mark_info.h"
+#include "passage_planner_dlg.h"
 #include "ocpn_platform.h"
 #include "peer_client_dlg.h"
 #include "pluginmanager.h"
@@ -167,6 +169,10 @@ enum {
   ID_DEF_ZERO_XTE,
 
   ID_DEF_MENU_DEBUG,
+
+  ID_DEF_MENU_PASSAGE_PLANNER,
+  ID_DEF_MENU_NEW_HARBOUR,
+  ID_DEF_MENU_LOGBOOK,
   ID_DGB_MENU_NMEA_WINDOW,
 
   ID_DEF_MENU_GROUPBASE,  // Must be last entry, as chart group identifiers are
@@ -477,6 +483,11 @@ void CanvasMenuHandler::CanvasPopupMenu(int x, int y, int seltype) {
                   _menuText(_("Drop Mark"), "Ctrl-M"));
       MenuAppend1(contextMenu, ID_DEF_MENU_NEW_RT,
                   _menuText(_("New Route..."), "Ctrl-R"));
+      MenuAppend1(contextMenu, ID_DEF_MENU_PASSAGE_PLANNER,
+                  _("Passage Planner..."));
+      MenuAppend1(contextMenu, ID_DEF_MENU_NEW_HARBOUR,
+                  _("New Harbour/Anchorage Here..."));
+      MenuAppend1(contextMenu, ID_DEF_MENU_LOGBOOK, _("Logbook..."));
     }
 
     if (!bGPSValid)
@@ -1241,6 +1252,18 @@ void CanvasMenuHandler::PopupMenuHandler(wxCommandEvent &event) {
       parent->StartRoute();
       break;
     }
+
+    case ID_DEF_MENU_PASSAGE_PLANNER:
+      ShowPassagePlanner(top_frame::Get());
+      break;
+
+    case ID_DEF_MENU_NEW_HARBOUR:
+      ShowNewHarbourDialog(top_frame::Get(), zlat, zlon);
+      break;
+
+    case ID_DEF_MENU_LOGBOOK:
+      logbook::ShowLogbook(top_frame::Get());
+      break;
 
     case ID_DEF_MENU_AISTARGETLIST:
       parent->ShowAISTargetList();

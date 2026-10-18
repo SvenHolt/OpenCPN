@@ -126,6 +126,7 @@
 #include "ienc_toolbar.h"
 #include "layer.h"
 #include "load_errors_dlg.h"
+#include "logbook.h"
 #include "mark_info.h"
 #include "mui_bar.h"
 #include "N2KParser.h"
@@ -136,6 +137,7 @@
 #include "ocpn_plugin.h"
 #include "o_senc.h"
 #include "options.h"
+#include "passage_planner_dlg.h"
 #include "pluginmanager.h"
 #include "print_dialog.h"
 #include "printout_chart.h"
@@ -2641,6 +2643,16 @@ void MyFrame::OnToolLeftClick(wxCommandEvent &event) {
       break;
     }
 
+    case ID_MENU_PASSAGE_PLANNER: {
+      ShowPassagePlanner(this);
+      break;
+    }
+
+    case ID_MENU_LOGBOOK: {
+      logbook::ShowLogbook(this);
+      break;
+    }
+
     case ID_MENU_NAV_TRACK:
     case ID_TRACK: {
       if (!g_bTrackActive) {
@@ -3730,6 +3742,8 @@ void MyFrame::RegisterGlobalMenuItems() {
   tools_menu->AppendSeparator();
   tools_menu->Append(ID_MENU_ROUTE_MANAGER, _("Route && Mark Manager..."));
   tools_menu->Append(ID_MENU_ROUTE_NEW, _menuText(_("Create Route"), "Ctrl-R"));
+  tools_menu->Append(ID_MENU_PASSAGE_PLANNER, _("Passage Planner..."));
+  tools_menu->Append(ID_MENU_LOGBOOK, _("Logbook..."));
   tools_menu->AppendSeparator();
   tools_menu->Append(ID_MENU_MARK_BOAT,
                      _menuText(_("Drop Mark at Boat"), "Ctrl-O"));
@@ -4798,6 +4812,8 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
         wxLogMessage(laymsg);
         pConfig->LoadLayers(layerdir);
       }
+      // Continue the logbook of a passage still under way
+      logbook::Recorder::Get().Init();
       break;
     }
     case 8: {

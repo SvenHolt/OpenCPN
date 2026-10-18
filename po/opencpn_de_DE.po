@@ -9227,3 +9227,365 @@ msgstr "Eingabeereignisse"
 #: gui/src/user_colors_dlg.cpp:139
 msgid "Restore defaults"
 msgstr "Standardeinstellungen wiederherstellen"
+
+#: gui/src/passage_planner_dlg.cpp gui/src/logbook.cpp
+#, c-format
+msgid "%zu harbours/anchorages in %s"
+msgstr "%zu Häfen/Ankerplätze in %s"
+
+#, c-format
+msgid ", waves up to %.1f m"
+msgstr ", Wellen bis %.1f m"
+
+msgid "Add photo"
+msgstr "Foto hinzufügen"
+
+msgid "Add photo..."
+msgstr "Foto hinzufügen..."
+
+msgid "Anchorage"
+msgstr "Ankerplatz"
+
+msgid "Arrival"
+msgstr "Ankunft"
+
+#, c-format
+msgid "Arrival at %s"
+msgstr "Ankunft in %s"
+
+msgid "Berths"
+msgstr "Liegeplätze"
+
+msgid "Boat"
+msgstr "Boot"
+
+msgid "CSV (entries of all passages)"
+msgstr "CSV (Einträge aller Törns)"
+
+msgid "Calculate route"
+msgstr "Route berechnen"
+
+msgid "Calculate the passage for departures every 3 hours over the next two days."
+msgstr "Berechnet den Törn für Abfahrten alle 3 Stunden über die nächsten zwei Tage."
+
+msgid "Caption (optional)"
+msgstr "Bildunterschrift (optional)"
+
+msgid "Chandlery"
+msgstr "Bootszubehör"
+
+msgid "Closest angle to wind (deg)"
+msgstr "Höhe am Wind (Grad)"
+
+msgid "Compare departures"
+msgstr "Abfahrten vergleichen"
+
+msgid "Could not add the photo:"
+msgstr "Foto konnte nicht hinzugefügt werden:"
+
+msgid "Create route"
+msgstr "Route anlegen"
+
+msgid "Database not found:"
+msgstr "Datenbank nicht gefunden:"
+
+msgid "Database..."
+msgstr "Datenbank..."
+
+msgid "Date"
+msgstr "Datum"
+
+#, c-format
+msgid "Delete '%s' and its photos?"
+msgstr "'%s' mit allen Fotos löschen?"
+
+msgid "Delete this passage from the logbook?"
+msgstr "Diesen Törn aus dem Logbuch löschen?"
+
+msgid "Departure            Duration   Arrival              Engine   Gusts"
+msgstr "Abfahrt              Dauer      Ankunft              Motor    Böen"
+
+#, c-format
+msgid "Departure from %s"
+msgstr "Abfahrt in %s"
+
+#, c-format
+msgid "Distance %.1f NM in %s, max. %.1f kn"
+msgstr "Distanz %.1f sm in %s, max. %.1f kn"
+
+#, c-format
+msgid "Distance %.1f NM, duration %s, departure %s, arrival %s"
+msgstr "Distanz %.1f sm, Dauer %s, Abfahrt %s, Ankunft %s"
+
+msgid "Draft (m)"
+msgstr "Tiefgang (m)"
+
+msgid "Duration"
+msgstr "Dauer"
+
+msgid "End passage"
+msgstr "Törn beenden"
+
+msgid "Engine"
+msgstr "Motor"
+
+msgid "Engine below (kn)"
+msgstr "Motor unter (kn)"
+
+msgid "Engine speed (kn)"
+msgstr "Motorfahrt (kn)"
+
+msgid "Entries"
+msgstr "Einträge"
+
+msgid "Export failed."
+msgstr "Export fehlgeschlagen."
+
+msgid "Export logbook"
+msgstr "Logbuch exportieren"
+
+msgid "Export..."
+msgstr "Exportieren..."
+
+msgid "Facilities"
+msgstr "Ausstattung"
+
+#, c-format
+msgid "Fastest departure within your limits: %s (%s)"
+msgstr "Schnellste Abfahrt innerhalb Ihrer Grenzen: %s (%s)"
+
+msgid "Food & drink"
+msgstr "Essen & Trinken"
+
+msgid "Fuel"
+msgstr "Tankstelle"
+
+msgid "Gusts"
+msgstr "Böen"
+
+msgid "HTML (all passages)"
+msgstr "HTML (alle Törns)"
+
+msgid "Harbour"
+msgstr "Hafen"
+
+msgid "Harbour / anchorage"
+msgstr "Hafen / Ankerplatz"
+
+msgid "Harbours and anchorages"
+msgstr "Häfen und Ankerplätze"
+
+msgid "Harbours..."
+msgstr "Häfen..."
+
+msgid "Hull speed (kn)"
+msgstr "Rumpfgeschwindigkeit (kn)"
+
+msgid "Images"
+msgstr "Bilder"
+
+msgid "Info..."
+msgstr "Info..."
+
+msgid "Latitude (decimal)"
+msgstr "Breite (dezimal)"
+
+msgid "Logbook"
+msgstr "Logbuch"
+
+msgid "Logbook..."
+msgstr "Logbuch..."
+
+msgid "Longitude (decimal)"
+msgstr "Länge (dezimal)"
+
+msgid "Marina"
+msgstr "Marina"
+
+msgid "Max. SOG"
+msgstr "Max. SOG"
+
+msgid "Mooring buoy"
+msgstr "Muringtonne"
+
+msgid "Nearby (1.5 km)"
+msgstr "In der Nähe (1,5 km)"
+
+msgid "New Harbour/Anchorage Here..."
+msgstr "Neuer Hafen/Ankerplatz hier..."
+
+msgid "New harbour / anchorage"
+msgstr "Neuer Hafen / Ankerplatz"
+
+msgid "No connection by water was found. The navigation grid may be too coarse for a narrow passage: rebuild it with 'seachart navgrid --nav-resolution 0.002'."
+msgstr "Keine Verbindung über Wasser gefunden. Das Navigationsgitter ist für eine enge Durchfahrt evtl. zu grob: mit 'seachart navgrid --nav-resolution 0.002' neu erstellen."
+
+msgid "No forecast for this departure - calculated with the default speed."
+msgstr "Keine Vorhersage für diese Abfahrt - mit Standardgeschwindigkeit berechnet."
+
+msgid "No navigable water near the harbour. Is the area covered by 'seachart navgrid'?"
+msgstr "Kein befahrbares Wasser in Hafennähe. Ist das Gebiet mit 'seachart navgrid' erfasst?"
+
+msgid "No navigation grid for this area: the route is a straight line and NOT checked for land or shallows."
+msgstr "Kein Navigationsgitter für dieses Gebiet: Die Route ist eine Gerade und NICHT auf Land oder Untiefen geprüft."
+
+msgid "No weather forecast offline - run 'seachart weather' before leaving. Calculated with the default speed."
+msgstr "Keine Wettervorhersage offline - vor dem Ablegen 'seachart weather' ausführen. Berechnung mit Standardgeschwindigkeit."
+
+msgid "Notes"
+msgstr "Notizen"
+
+msgid "OpenCPN restarted, logbook continued"
+msgstr "OpenCPN neu gestartet, Logbuch fortgesetzt"
+
+msgid "Opening hours"
+msgstr "Öffnungszeiten"
+
+msgid "Passage"
+msgstr "Törn"
+
+msgid "Passage Planner..."
+msgstr "Törnplaner..."
+
+msgid "Passage planner"
+msgstr "Törnplaner"
+
+msgid "Passage started: route activated, track and logbook are recording."
+msgstr "Törn gestartet: Route aktiviert, Track und Logbuch zeichnen auf."
+
+msgid "Phone"
+msgstr "Telefon"
+
+msgid "Photos"
+msgstr "Fotos"
+
+msgid "Plan"
+msgstr "Plan"
+
+msgid "Planned"
+msgstr "Geplant"
+
+#, c-format
+msgid "Planned: %.1f NM, departure %s, arrival %s"
+msgstr "Geplant: %.1f sm, Abfahrt %s, Ankunft %s"
+
+msgid "Please choose two different harbours."
+msgstr "Bitte zwei verschiedene Häfen wählen."
+
+msgid "Please enter a name."
+msgstr "Bitte einen Namen eingeben."
+
+msgid "Please enter the position in decimal degrees, e.g. 54.3812 and 10.1634."
+msgstr "Bitte die Position in Dezimalgrad eingeben, z.B. 54.3812 und 10.1634."
+
+msgid "Rating (0-5)"
+msgstr "Bewertung (0-5)"
+
+msgid "Remove photo"
+msgstr "Foto entfernen"
+
+msgid "Remove this photo?"
+msgstr "Dieses Foto entfernen?"
+
+msgid "Save notes"
+msgstr "Notizen speichern"
+
+msgid "Saving failed:"
+msgstr "Speichern fehlgeschlagen:"
+
+msgid "Search"
+msgstr "Suche"
+
+msgid "Service"
+msgstr "Service"
+
+msgid "Shopping"
+msgstr "Einkaufen"
+
+msgid "Show track"
+msgstr "Track zeigen"
+
+msgid "Sight"
+msgstr "Sehenswert"
+
+msgid "Start"
+msgstr "Start"
+
+msgid "Start passage"
+msgstr "Törn starten"
+
+msgid "TWA"
+msgstr "TWA"
+
+msgid "The logbook could not be written:"
+msgstr "Das Logbuch konnte nicht geschrieben werden:"
+
+msgid "The passage ends after the end of the forecast."
+msgstr "Der Törn endet nach dem Ende der Vorhersage."
+
+msgid "The track of this passage was not found (deleted?)."
+msgstr "Der Track dieses Törns wurde nicht gefunden (gelöscht?)."
+
+msgid "Transport"
+msgstr "Verkehr"
+
+#, c-format
+msgid "Under engine %.1f NM, wind up to %.0f kn, gusts up to %.0f kn"
+msgstr "Unter Motor %.1f sm, Wind bis %.0f kn, Böen bis %.0f kn"
+
+msgid "Use the engine when sailing is too slow"
+msgstr "Motor nutzen, wenn Segeln zu langsam ist"
+
+msgid "VHF channel"
+msgstr "UKW-Kanal"
+
+#, c-format
+msgid "WARNING: %d legs above your wind or gust limit."
+msgstr "WARNUNG: %d Etappen über Ihrer Wind- oder Böengrenze."
+
+msgid "Warn above gusts (kn)"
+msgstr "Warnen ab Böen (kn)"
+
+msgid "Warn above wind (kn)"
+msgstr "Warnen ab Wind (kn)"
+
+msgid "Water depth (m)"
+msgstr "Wassertiefe (m)"
+
+msgid "Waves"
+msgstr "Wellen"
+
+msgid "Weather"
+msgstr "Wetter"
+
+msgid "Weather forecast"
+msgstr "Wettervorhersage"
+
+#, c-format
+msgid "Weather forecast from %s, valid until %s"
+msgstr "Wettervorhersage vom %s, gültig bis %s"
+
+msgid "Wind"
+msgstr "Wind"
+
+msgid "Wind for hull speed (kn)"
+msgstr "Wind für Rumpfgeschw. (kn)"
+
+msgid "e.g. fuel, water, electricity, showers"
+msgstr "z.B. Diesel, Wasser, Strom, Duschen"
+
+#, c-format
+msgid "forecast from %s"
+msgstr "Vorhersage vom %s"
+
+msgid "no forecast"
+msgstr "keine Vorhersage"
+
+msgid "seachart database"
+msgstr "seachart-Datenbank"
+
+msgid "under way"
+msgstr "unterwegs"
+
+msgid "wind"
+msgstr "Wind"

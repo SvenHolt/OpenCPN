@@ -124,6 +124,10 @@ if (UNIX AND NOT DEFINED ENV{FLATPAK_ID})
   add_dependencies(ipc-srv-tests cli-server ipc-client)
 endif ()
 
+# Passage planner: seachart database and weather router (no wx needed)
+add_executable(passage_router_tests passage_router_tests.cpp)
+target_link_libraries(passage_router_tests PRIVATE ocpn::seachart ocpn::gtest)
+
 set(_BUF_TEST_SRC buffer_tests.cpp ${CMAKE_SOURCE_DIR}/cli/api_shim.cpp)
 add_executable(buffer_tests ${_BUF_TEST_SRC})
 target_link_libraries(
@@ -145,6 +149,7 @@ endif ()
 include(GoogleTest)
 gtest_add_tests(TARGET tests)
 gtest_add_tests(TARGET buffer_tests)
+gtest_add_tests(TARGET passage_router_tests)
 
 if (LINUX AND NOT DEFINED ENV{FLATPAK_ID} AND NOT OCPN_DISTRO_BUILD)
   # We don't have a session bus available when testing flatpak

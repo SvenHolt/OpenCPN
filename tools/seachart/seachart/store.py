@@ -13,6 +13,7 @@ import datetime
 import json
 import os
 import sqlite3
+import sys
 
 import numpy as np
 from shapely import wkb
@@ -67,10 +68,29 @@ def default_path():
     <Documents>/seachart/seachart.db (override with SEACHART_DB)."""
     if os.environ.get("SEACHART_DB"):
         return os.environ["SEACHART_DB"]
+    return os.path.join(documents_dir(), "seachart", "seachart.db")
+
+
+def documents_dir():
+    """The folder wxStandardPaths::GetDocumentsDir() returns in OpenCPN."""
+    if sys.platform == "win32":
+        import ctypes
+        buf = ctypes.create_unicode_buffer(260)
+        # CSIDL_PERSONAL: "Documents", also when redirected to OneDrive
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0:
+            return buf.value
     home = os.path.expanduser("~")
-    docs = os.path.join(home, "Documents")
-    base = docs if os.path.isdir(docs) else home
-    return os.path.join(base, "seachart", "seachart.db")
+    try:   # XDG user dirs (Linux), as used by wxWidgets
+        with open(os.path.join(home, ".config", "user-dirs.dirs")) as f:
+            for line in f:
+                if line.startswith("XDG_DOCUMENTS_DIR="):
+                    path = line.split("=", 1)[1].strip().strip('"')
+                    return path.replace("$HOME", home)
+    except OSError:
+        pass
+    if sys.platform == "darwin":
+        return os.path.join(home, "Documents")
+    return home     # wxGTK without XDG configuration
 
 
 class Store:
