@@ -221,6 +221,14 @@ void SimulatorConnection::simulateBoat(QByteArray& out) {
   line(QStringLiteral("VWVHW,,T,,M,%1,N,%2,K")
            .arg(m_sog * 0.97, 0, 'f', 1)
            .arg(m_sog * 0.97 * 1.852, 0, 'f', 1));
+  // Heel: sail force grows with the apparent wind across the boat; wind
+  // from starboard heels her to port (negative).
+  const double heel =
+      std::min(28.0, 0.09 * aws * aws * std::abs(std::sin(awa * M_PI / 180)) *
+                         sails.areaFactor()) *
+          (awa > 0 ? -1 : 1) +
+      (rng->generateDouble() - 0.5) * 1.5;
+  line(QStringLiteral("IIXDR,A,%1,D,ROLL").arg(heel, 0, 'f', 1));
   line(QStringLiteral("SDDPT,%1,0.5")
            .arg(14 + 6 * std::sin(m_tick / 60.0), 0, 'f', 1));
   line(QStringLiteral("ERRPM,E,1,%1,,A").arg(m_rpm, 0, 'f', 0));

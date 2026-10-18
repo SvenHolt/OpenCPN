@@ -73,6 +73,7 @@ void NavStore::applyNavUpdate(const NavUpdate& u) {
   bool envChanged = false;
   if (u.stw) m_env.stw = *u.stw, envChanged = true;
   if (u.depth) m_env.depth = *u.depth, envChanged = true;
+  if (u.heel) m_env.heel = *u.heel, envChanged = true;
   if (u.twa || u.tws || u.twd) {
     if (u.twa) m_env.twa = *u.twa;
     if (u.tws) m_env.tws = *u.tws;

@@ -53,6 +53,11 @@ Zum Ausprobieren
   Einstellungen -> "Automationen", z. B. "Winter-Duschen": Heizung an,
   Salon 21 °C, Bad 23 °C, Warmwasser an, Licht "Duschen" - per Tipp oder
   zu einer Uhrzeit (Wochentage, Monate).
+* "Log" (Taste L): vergangene Etappen - Übersicht und Details mit dem
+  Weg auf der Karte und Diagrammen für Fahrt, Krängung, Wind, Energie,
+  Diesel, Temperatur und Tiefe. Etappen werden automatisch aufgezeichnet.
+  "Logbook": für jeden Tag Crew, Wetter und Bericht; "Export logbook"
+  speichert alles als Markdown.
 * "Supplies" (Versorgung) -> "Range": wie lange Wasser, Fäkalientank,
   Batterie und Diesel vor Anker bzw. unterwegs reichen - gelernt aus den
   letzten Tagen oder der letzten Reise, die Heizung mit der

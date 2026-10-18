@@ -15,6 +15,7 @@
 #include "ui/DrawerPages.h"
 #include "ui/SailPage.h"
 #include "ui/Icons.h"
+#include "ui/LogView.h"
 #include "ui/OfflinePage.h"
 #include "ui/RoutePlanPanel.h"
 #include "ui/Overlays.h"
@@ -45,6 +46,8 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_areaBar = new AreaSelectBar(this);
   m_cockpit = new CockpitView(this);
   m_boat = new BoatView(this);
+  m_log = new LogView(this);
+  m_log->setLand(m_chart->landData());
   m_toast = new Toast(this);
   m_drawer = new SideDrawer(this);
   m_dock = new BottomDock(this);
@@ -146,7 +149,10 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
 
   connect(m_dock, &BottomDock::sectionRequested, m_drawer, &SideDrawer::toggle);
   connect(m_dock, &BottomDock::viewRequested, this, [this](int v) {
-    setView(v == 0 ? View::Cockpit : v == 1 ? View::Chart : View::Boat);
+    setView(v == 0   ? View::Cockpit
+            : v == 1 ? View::Chart
+            : v == 2 ? View::Boat
+                     : View::Log);
   });
   connect(m_cockpit, &CockpitView::sailConfigRequested, this,
           [this] { m_drawer->open(m_sailSection); });
@@ -218,7 +224,11 @@ void MainWindow::setView(View v) {
   m_view = v;
   m_cockpit->setVisible(v == View::Cockpit);
   m_boat->setVisible(v == View::Boat);
-  m_dock->setActiveView(v == View::Cockpit ? 0 : v == View::Chart ? 1 : 2);
+  m_log->setVisible(v == View::Log);
+  m_dock->setActiveView(v == View::Cockpit ? 0
+                        : v == View::Chart ? 1
+                        : v == View::Boat  ? 2
+                                           : 3);
   layoutOverlays();
 }
 
@@ -293,6 +303,8 @@ void MainWindow::layoutOverlays(bool animate) {
   m_cockpit->setLeftInset(left);
   m_boat->setGeometry(0, 0, w, mapH);
   m_boat->setLeftInset(left);
+  m_log->setGeometry(0, 0, w, mapH);
+  m_log->setLeftInset(left);
 
   m_instruments->resize(m_instruments->sizeHint());
   const QPoint instPos(left + kGap - kShadow, kGap - kShadow);
@@ -376,6 +388,7 @@ void MainWindow::layoutOverlays(bool animate) {
     if (!o.first->property("chartOnly").toBool()) o.first->raise();
   // The boat view uses the whole screen for its cards.
   if (m_view == View::Boat) m_boat->raise();
+  if (m_view == View::Log) m_log->raise();
   m_drawer->raise();
   m_routeBar->raise();
   m_areaBar->raise();
@@ -533,6 +546,9 @@ void MainWindow::keyPressEvent(QKeyEvent* e) {
       break;
     case Qt::Key_B:
       setView(m_view == View::Boat ? View::Chart : View::Boat);
+      break;
+    case Qt::Key_L:
+      setView(m_view == View::Log ? View::Chart : View::Log);
       break;
     case Qt::Key_F11:
       setWindowState(windowState() ^ Qt::WindowFullScreen);

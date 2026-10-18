@@ -34,6 +34,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
 | **Bordsysteme · Nachtfahrt** | **Automation „Winter-Duschen“** |
 | ![Boot](doc/screenshot-boat.png) | ![Automation](doc/screenshot-automation.png) |
+| **Etappen: Weg auf der Karte, Diagramme** | **Logbuch: Tagesbericht** |
+| ![Etappen](doc/screenshot-legs.png) | ![Logbuch](doc/screenshot-logbook.png) |
 | **Reichweite: Wasser, Fäkalien, Batterie, Diesel** | **Proviant prüfen · Einkaufsliste** |
 | ![Reichweite](doc/screenshot-range.png) | ![Proviant](doc/screenshot-provisions.png) |
 | **Einstellungen (Hauptmenü)** | **Lichtszenen-Editor** |
@@ -74,6 +76,9 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Automationen** (z. B. Winter-Duschen): per Tipp oder Uhrzeit, Wochentage, Monate | ✅ |
 | **Reichweite** von Wasser, Fäkalientank, Batterie und Diesel vor Anker und unterwegs (gelernt aus den letzten Tagen/der letzten Reise, Temperaturvorhersage) | ✅ |
 | **Proviant**: Obst, Gemüse, Konserven, Dosen, Kühlschrank, TK; Verbrauch, MHD, Prüfung, Einkaufsliste | ✅ |
+| **Etappen**: automatische Aufzeichnung, Übersicht, Details mit Karte und Diagrammen (Fahrt, Krängung, Wind, Energie, Diesel, Temperatur, Tiefe) | ✅ |
+| **Logbuch**: Tagesbericht mit Crew, Wetter und Text, Daten der Etappen, Markdown-Export | ✅ |
+| Krängung aus NMEA XDR (`ROLL`/`HEEL`) | ✅ |
 | **Hauptmenü**: Einstellungen, Routen, Markierungen, Tracks, AIS, Gezeiten, Wetter; Konfiguration und Offline unter Einstellungen | ✅ |
 | **Reisen offline speichern** (Route, Planung, Modelle, GRIB, Häfen und Küste entlang der Route) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
@@ -255,6 +260,49 @@ und Tanks leeren sich. Jeder Wert und jeder Schalter trägt bereits seinen
 Signal-K-Pfad (`environment.inside.<raum>.temperature`,
 `tanks.freshWater.0.currentLevel`, `electrical.switches.<id>.state` …).
 Die Signal-K-Anbindung und die Elektronik folgen später.
+
+### Etappen und Logbuch (Ansicht „Log“)
+
+Vierte Ansicht im Dock neben Cockpit, Karte und Boot (Taste `L`).
+
+**Aufzeichnung.** Sobald das Boot fährt (> 1,5 kn oder Motor an), wird
+alle 30 Sekunden aufgezeichnet: Position, Fahrt über Grund und durchs
+Wasser, Kurs, Steuerkurs, **Krängung** (NMEA `XDR` mit `ROLL`/`HEEL`),
+wahrer und scheinbarer Wind, Tiefe, Außentemperatur, Stromverbrauch und
+Ladung (Solar, Lichtmaschine, Landstrom), Ladezustand, Dieselverbrauch
+(Motor und Heizung) und Drehzahl. Nach 20 Minuten Stillstand endet die
+Etappe; die Zeit im Stillstand am Ende wird abgeschnitten, kurze
+Bewegungen im Hafen (< 0,2 sm) verworfen. Beginn und Ende neben einer
+gespeicherten Markierung (< 1 sm) übernehmen deren Namen. Gespeichert in
+`legs/<id>.json`; solange die Werte simuliert sind, gibt es vier
+Beispieletappen (Kiel – Marstal – Faaborg – Sønderborg – Kiel).
+
+**Übersicht.** Alle Etappen mit Datum, Strecke, Dauer, Durchschnitt und
+Segelanteil, darüber die Summen (Strecke, Stunden, Segelanteil, Diesel).
+
+**Details.**
+* Kennzahlen: Strecke, Dauer, Durchschnitts- und Höchstfahrt, Segelanteil,
+  größte Krängung, Wind (Mittel/Maximum), Motorstunden, Diesel,
+  verbrauchte und geladene Ah, Temperaturspanne.
+* Karte mit dem Weg auf der Basiskarte, nach Fahrt eingefärbt, mit
+  Windpfeilen, Start und Ziel.
+* Diagramme über die Zeit: Fahrt (SOG/STW), Krängung, Wind (wahr und
+  scheinbar), Windrichtung, Energie (Verbrauch/Ladung), Batterie,
+  Diesel, Außentemperatur und Tiefe. Motorfahrt ist hinterlegt.
+* Die Maus über einem Diagramm zeigt die Werte und die Position auf der
+  Karte; ein Tipp auf den Weg setzt die Markierung in allen Diagrammen.
+* „Umbenennen“ (Name, von, nach) und „Logbuch“ für den Tag der Etappe.
+
+**Logbuch.**
+* Liste der Tage (mit Etappen oder Eintrag, heute immer); ein Stift zeigt
+  geschriebene Berichte.
+* Je Tag: die aufgezeichneten Daten (Orte, Strecke, Zeit, Wind,
+  Motor, Diesel, Temperatur) mit Links zu den Etappen, dazu **Crew**,
+  **Wetter** („Aus den Daten“ trägt Wind und Temperatur ein) und der
+  **Bericht** als freier Text. Gespeichert wird beim Schreiben
+  (`logbook.json`).
+* „Logbuch exportieren“ schreibt alle Tage mit Daten und Berichten als
+  Markdown.
 
 ### Versorgung: Reichweite und Proviant
 
@@ -571,7 +619,7 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--charts <ordner>` | fügt einen Kartenordner hinzu |
 | `--grib <datei>` | öffnet eine GRIB-Datei |
 | `--center lat,lon[,maßstab]` | zentriert die Karte, z. B. `40.84,-73.93,15000` |
-| `--view cockpit\|chart\|boat` | Startansicht |
+| `--view cockpit\|chart\|boat\|log` | Startansicht |
 | `--day` | startet im Tagmodus |
 | `--page NAME` | öffnet eine Seite: `settings`, `routes`, `general`, `charts`, `data`, `offline`, `sails`, `scenes`, `automations`, `supplies`, `range`, `provisions`, `provision-check` (oder ihre Nummer) |
 | `--import-osm datei.osm` | importiert eine OSM-XML-Datei als Offline-Gebiet |
@@ -642,6 +690,8 @@ qt/
 │   ├── Consumption        Verbrauchsprotokoll (30 Tage)
 │   ├── Range              Reichweitenanalyse, Temperaturvorhersage
 │   ├── Provisions         Proviant, Verbrauch, Prüfung, Einkaufsliste
+│   ├── Legs               Etappen-Aufzeichnung und Kennzahlen
+│   ├── Logbook            Tagesberichte, Tagesdaten, Markdown
 │   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge,
 │   │                      OnlineOsm (öffentliche Server, Kachel-Cache, Nominatim)
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
@@ -659,6 +709,7 @@ qt/
 │   ├── BoatView           Ansicht „Boot“: Kabinen-Layout und Systemkarten
 │   ├── BoatPages          Lichtszenen-Editor, Automationen
 │   ├── SupplyPages        Reichweite, Proviant, Proviant prüfen
+│   ├── LogView            Ansicht „Log“: Etappen (Karte, Diagramme), Logbuch
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
   QCommandLineOption charts("charts", "Add a chart directory or file.", "path");
   QCommandLineOption center(
       "center", "Center the chart: lat,lon[,display scale].", "lat,lon,scale");
-  QCommandLineOption view("view", "Start view: cockpit, chart or boat.",
+  QCommandLineOption view("view", "Start view: cockpit, chart, boat or log.",
                           "view");
   QCommandLineOption grib("grib", "Open a GRIB file.", "file");
   QCommandLineOption fresh("fresh",
@@ -176,6 +176,7 @@ int main(int argc, char** argv) {
   if (cli.isSet(view))
     win.setView(cli.value(view) == "chart"  ? MainWindow::View::Chart
                 : cli.value(view) == "boat" ? MainWindow::View::Boat
+                : cli.value(view) == "log"  ? MainWindow::View::Log
                                             : MainWindow::View::Cockpit);
   if (cli.isSet(grib)) {
     QString err;

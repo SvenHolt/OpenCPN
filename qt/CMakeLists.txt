@@ -85,6 +85,8 @@ set(OCPN_QT_CORE_SOURCES
   src/core/Consumption.cpp
   src/core/Range.cpp
   src/core/Provisions.cpp
+  src/core/Legs.cpp
+  src/core/Logbook.cpp
   src/core/charts/Chart.cpp
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
@@ -131,6 +133,7 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/BoatView.cpp
   src/ui/BoatPages.cpp
   src/ui/SupplyPages.cpp
+  src/ui/LogView.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp
@@ -243,6 +246,9 @@ if(OCPN_QT_BUILD_TESTS)
     add_executable(ocpnqt_planning_tests tests/test_planning.cpp)
     target_link_libraries(ocpnqt_planning_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_planning_tests COMMAND ocpnqt_planning_tests)
+    add_executable(ocpnqt_legs_tests tests/test_legs.cpp)
+    target_link_libraries(ocpnqt_legs_tests PRIVATE ocpnqt_core Qt6::Test)
+    add_test(NAME ocpnqt_legs_tests COMMAND ocpnqt_legs_tests)
     add_executable(ocpnqt_supplies_tests tests/test_supplies.cpp)
     target_link_libraries(ocpnqt_supplies_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_supplies_tests COMMAND ocpnqt_supplies_tests)

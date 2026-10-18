@@ -59,7 +59,7 @@ public:
   explicit BottomDock(QWidget* parent = nullptr);
   /** Adds a main menu button that opens drawer page `page`. */
   void addSection(const QString& icon, const QString& label, int page);
-  /** 0 = cockpit, 1 = chart, 2 = boat systems */
+  /** 0 = cockpit, 1 = chart, 2 = boat systems, 3 = log */
   void setActiveView(int view);
   /** Highlights the button of drawer page `page` (-1: none). */
   void setActiveSection(int page);
@@ -83,7 +83,8 @@ private:
   QVector<int> m_pages;
   DockButton* m_more;
   int m_active = -1;
-  DockButton* m_views[3];
+  static constexpr int kViews = 4;
+  DockButton* m_views[kViews];
   class QHBoxLayout* m_sectionLayout;
   DockButton* m_theme;
   QLabel* m_clock;

@@ -15,6 +15,10 @@
 #include "core/BoatSystems.h"
 #include "ui/BoatPages.h"
 #include "ui/SupplyPages.h"
+#include "ui/LogView.h"
+#include "core/Legs.h"
+#include "core/Logbook.h"
+#include <QPlainTextEdit>
 #include "core/Provisions.h"
 #include "core/Range.h"
 #include "ui/BoatView.h"
@@ -613,6 +617,103 @@ private slots:
     }
     m_win->setView(MainWindow::View::Chart);
     store.clear();
+  }
+
+  void logView() {
+    // The dock switches to the log view.
+    auto* dock = m_win->findChild<BottomDock*>();
+    DockButton* logButton = nullptr;
+    for (auto* b : dock->findChildren<DockButton*>())
+      if (b->text() == tr("Log")) logButton = b;
+    QVERIFY(logButton);
+    logButton->click();
+    QCOMPARE(m_win->view(), MainWindow::View::Log);
+    LogView* view = m_win->logView();
+    QVERIFY(view->isVisible());
+    QTest::qWait(100);
+
+    // Overview: one row per leg; the newest is shown.
+    const auto& legs = LegStore::instance().legs();
+    QVERIFY(legs.size() >= 4);
+    QCOMPARE(view->detail()->legId(), legs.first().id);
+    const QString older = legs[1].id;
+    ListRow* row = nullptr;
+    for (auto* r : view->findChildren<ListRow*>("leg-" + older))
+      if (!r->isHidden()) row = r;
+    QVERIFY(row);
+    QTest::mouseClick(row, Qt::LeftButton, {}, row->rect().center());
+    QCOMPARE(view->detail()->legId(), older);
+    // Charts: speed, heel, wind, energy, diesel, temperature …
+    QStringList titles;
+    for (TimeChart* c : view->detail()->charts()) {
+      titles << c->title();
+      QVERIFY2(c->pointCount(0) > 50, qPrintable(c->title()));
+    }
+    for (const QString& t : {tr("Speed"), tr("Heel"), tr("Wind"), tr("Energy"),
+                             tr("Diesel"), tr("Outside temperature")})
+      QVERIFY2(titles.contains(t), qPrintable(t));
+    // Tapping the track moves the marker in the charts.
+    TrackMap* map = view->detail()->map();
+    const Leg* leg = LegStore::instance().leg(older);
+    const int mid = int(leg->samples.size()) / 2;
+    QSignalSpy picked(map, &TrackMap::timePicked);
+    QTest::mouseClick(map, Qt::LeftButton, {}, map->screenPos(mid).toPoint());
+    QCOMPARE(picked.size(), 1);
+    const qint64 t = picked.first().first().toLongLong();
+    QVERIFY(std::llabs(t - leg->samples[mid].t) < 30 * 60);
+    // Hovering a chart moves the map marker (no crash, value box).
+    TimeChart* speed = view->detail()->charts().first();
+    QTest::mouseMove(speed, QPoint(speed->width() / 2, speed->height() / 2));
+    QTest::qWait(150);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_LEGS_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+
+    // Logbook for the day of the leg.
+    QPushButton* toBook = nullptr;
+    for (auto* b : view->detail()->findChildren<QPushButton*>())
+      if (b->text() == tr("Logbook")) toBook = b;
+    QVERIFY(toBook);
+    toBook->click();
+    QVERIFY(view->logbookShown());
+    LogbookEditor* ed = view->editor();
+    const QDate day = leg->start().toLocalTime().date();
+    QCOMPARE(ed->date(), day);
+    ed->insertWeather();
+    QVERIFY(ed->weather()->text().contains("kn"));
+    ed->crew()->setText("Sven, Anna");
+    ed->report()->setPlainText("Reefed early, a fine day under sail.");
+    ed->flush();
+    QCOMPARE(Logbook::instance().entry(day).report,
+             QStringLiteral("Reefed early, a fine day under sail."));
+    QCOMPARE(Logbook::instance().entry(day).crew, QStringLiteral("Sven, Anna"));
+    QTest::qWait(100);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_LOGBOOK_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    // Another day from the list, then back: the text is still there.
+    ListRow* today = nullptr;
+    for (auto* r : view->findChildren<ListRow*>(
+             "day-" + QDate::currentDate().toString(Qt::ISODate)))
+      if (!r->isHidden()) today = r;
+    QVERIFY(today);
+    QTest::mouseClick(today, Qt::LeftButton, {}, today->rect().center());
+    QCOMPARE(ed->date(), QDate::currentDate());
+    QVERIFY(ed->report()->toPlainText().isEmpty() ||
+            day == QDate::currentDate());
+    view->showLogbook(day);
+    QCOMPARE(ed->report()->toPlainText(),
+             QStringLiteral("Reefed early, a fine day under sail."));
+    // The day's leg opens from the logbook.
+    QTest::qWait(50);  // new buttons are shown by the event loop
+    QPushButton* dayLeg = nullptr;
+    for (auto* b : ed->findChildren<QPushButton*>("dayLeg"))
+      if (!b->isHidden()) dayLeg = b;
+    QVERIFY(dayLeg);
+    dayLeg->click();
+    QVERIFY(!view->logbookShown());
+    QCOMPARE(view->detail()->legId(), older);
+    m_win->setView(MainWindow::View::Chart);
   }
 
   void polarEditorRoundTrip() {
