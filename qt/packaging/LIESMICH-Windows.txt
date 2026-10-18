@@ -1,0 +1,33 @@
+OpenCPN Qt – Windows-Vorschau
+=============================
+
+Installation: nicht nötig. ZIP-Datei vollständig entpacken (nicht direkt
+aus dem ZIP starten) und eine der Startdateien doppelklicken:
+
+  "OpenCPN Qt Demo.bat"    Simulator, Demo-Route und Beispielkarten
+  "OpenCPN Qt starten.bat" normaler Start
+
+Windows SmartScreen kann beim ersten Start warnen, weil das Programm
+nicht signiert ist: "Weitere Informationen" -> "Trotzdem ausführen".
+
+Zum Ausprobieren
+----------------
+* Start im "Cockpit": animiertes Boot in der Kompassrose mit Kurs, Fahrt,
+  Wind und nächstem Wegpunkt. Unten links im Dock zwischen "Cockpit" und
+  "Karte" umschalten (Taste C).
+* Oben auf die Segelanzeige tippen (oder Dock "Segel"): Groß/Reffs,
+  Genua-Rollung, Spinnaker usw. einstellen. Bei "Motor" oder
+  "Motorsegeln" erscheint die Motoranzeige (Drehzahl, Temperatur,
+  Öldruck, Tank und Reichweite); der Simulator fährt entsprechend.
+* Unten im Dock "Karten" -> "Kartenordner hinzufügen": Ordner mit S-57-ENC
+  (*.000) oder BSB-Rasterkarten (*.kap). Kostenlose ENCs: charts.noaa.gov
+* "Wetter" -> "Windvorhersage laden" (NOAA GFS, braucht Internet), oder
+  "GRIB-Datei öffnen": samples\gfs_simple.grb2
+* "Gezeiten": Stationen in der Nähe des Bootes bzw. der Kartenmitte
+* "Daten": NMEA über UDP (Port 10110), TCP oder seriell (COM-Port)
+* "Media": Spotify über die Spotify-Web-API (Client-ID nötig, siehe
+  Anleitung auf der Seite). Die automatische Erkennung von Spotify-Desktop
+  und YouTube Music (MPRIS) gibt es nur unter Linux.
+* Tastatur: +/- Zoom, F folgt dem Schiff, F11 Vollbild, Esc schließt Panels
+
+Hinweis: Vorschauversion, keine zugelassene Navigationssoftware.
