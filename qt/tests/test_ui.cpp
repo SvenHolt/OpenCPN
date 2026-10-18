@@ -1,4 +1,5 @@
 // Smoke tests for the opencpn-qt user interface (run offscreen).
+#include <QPushButton>
 #include <QtTest>
 
 #include "core/AppSettings.h"
@@ -7,7 +8,15 @@
 #include "core/NavStore.h"
 #include "core/Shapefile.h"
 #include "ui/ChartView.h"
+#include "ui/DrawerPages.h"
 #include "ui/MainWindow.h"
+#include "core/osm/OnlineOsm.h"
+#include "ui/OfflinePage.h"
+#include "core/BoatSystems.h"
+#include "ui/BoatView.h"
+#include "ui/PassagePanel.h"
+#include "ui/PolarPanel.h"
+#include "ui/RoutePlanPanel.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
 #include "core/Nmea.h"
@@ -24,6 +33,8 @@ private slots:
         QSettings::IniFormat, QSettings::UserScope,
         QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     Theme::instance().apply();
+    // No requests to public servers from the tests.
+    OnlineOsm::instance().setEnabled(false);
     m_win = new MainWindow(std::make_shared<LandData>());
     m_win->resize(1400, 900);
     m_win->show();
@@ -62,6 +73,232 @@ private slots:
     NavStore::instance().activateRoute(id, 1);
     QVERIFY(NavStore::instance().guidance().active);
     QVERIFY(NavStore::instance().guidance().dtwNm > 0);
+  }
+
+  void areaSelectionByDragging() {
+    ChartView* chart = m_win->chart();
+    chart->centerOn(54.5, 10.3, false);
+    chart->setScale(2.0e5);
+    chart->startAreaSelect();
+    QCOMPARE(chart->mode(), ChartView::Mode::AreaSelect);
+    const GeoBox start = chart->selectedArea();
+    QVERIFY(start.isValid());
+    const GeoBox visible = chart->visibleArea();
+    QVERIFY(start.south > visible.south && start.north < visible.north);
+
+    const auto drag = [chart](QPointF from, QPointF to) {
+      const auto send = [chart](QEvent::Type t, QPointF pos,
+                                Qt::MouseButtons buttons) {
+        QMouseEvent e(t, pos, chart->mapToGlobal(pos), Qt::LeftButton, buttons,
+                      Qt::NoModifier);
+        QCoreApplication::sendEvent(chart, &e);
+      };
+      send(QEvent::MouseButtonPress, from, Qt::LeftButton);
+      for (int i = 1; i <= 10; ++i)
+        send(QEvent::MouseMove, from + (to - from) * (i / 10.0),
+             Qt::LeftButton);
+      send(QEvent::MouseButtonRelease, to, Qt::NoButton);
+    };
+    // South east corner handle resizes two edges.
+    const QPointF se = chart->screenPos(start.south, start.east);
+    drag(se, se + QPointF(80, 60));
+    GeoBox b = chart->selectedArea();
+    QVERIFY(b.east > start.east);
+    QVERIFY(b.south < start.south);
+    QCOMPARE(b.north, start.north);
+    QCOMPARE(b.west, start.west);
+
+    // Dragging inside moves the frame without resizing it.
+    const QPointF mid =
+        chart->screenPos((b.north + b.south) / 2, (b.west + b.east) / 2);
+    drag(mid + QPointF(30, 0), mid + QPointF(-70, 0));
+    const GeoBox moved = chart->selectedArea();
+    QVERIFY(moved.west < b.west);
+    QVERIFY(std::fabs((moved.east - moved.west) - (b.east - b.west)) < 1e-9);
+
+    // Dragging outside pans the chart; the frame stays at its place.
+    double lat0, lon0;
+    chart->center(lat0, lon0);
+    drag(QPointF(1300, 100), QPointF(1200, 150));
+    double lat1, lon1;
+    chart->center(lat1, lon1);
+    QVERIFY(lon1 > lon0);
+    QCOMPARE(chart->selectedArea().west, moved.west);
+
+    // Edges cannot be dragged across each other.
+    const QPointF n =
+        chart->screenPos(moved.north, (moved.west + moved.east) / 2);
+    drag(n, n + QPointF(0, 2000));
+    QVERIFY(chart->selectedArea().north > chart->selectedArea().south);
+
+    QTest::qWait(300);
+    const QString shot = qEnvironmentVariable("OCPN_QT_TEST_AREA_SHOT");
+    if (!shot.isEmpty()) m_win->grab().save(shot);
+    chart->finishAreaSelect();
+    QCOMPARE(chart->mode(), ChartView::Mode::Browse);
+  }
+
+  void planHarbourToHarbour() {
+    auto* panel = m_win->findChild<RoutePlanPanel*>();
+    QVERIFY(panel);
+    QPushButton* plan = nullptr;
+    QPushButton* save = nullptr;
+    for (auto* b : panel->findChildren<QPushButton*>()) {
+      if (b->text() == "Plan route") plan = b;
+      if (b->text() == "Save and navigate") save = b;
+    }
+    QVERIFY(plan && save);
+    QVERIFY(!plan->isEnabled());
+    panel->setFrom(Place{"Kiel", "harbour", 54.33, 10.15, true});
+    panel->setTo(Place{"Laboe", "harbour", 54.41, 10.22, true});
+    QVERIFY(plan->isEnabled());
+    const int before = int(NavStore::instance().routes().size());
+    plan->click();
+    QVERIFY(QTest::qWaitFor([save, panel] { return save->isVisibleTo(panel); },
+                            20000));
+    save->click();
+    QCOMPARE(int(NavStore::instance().routes().size()), before + 1);
+    const Route& r = NavStore::instance().routes().last();
+    QCOMPARE(r.name, QStringLiteral("Kiel → Laboe"));
+    QCOMPARE(r.points.first().name, QStringLiteral("Kiel"));
+    QCOMPARE(r.points.last().name, QStringLiteral("Laboe"));
+    QCOMPARE(NavStore::instance().activeRouteId(), r.id);
+    NavStore::instance().stopNavigation();
+  }
+
+  void passageWithModels() {
+    auto* passage = m_win->findChild<PassagePanel*>();
+    QVERIFY(passage);
+    passage->setRoute({{10.0, 54.0}, {10.0, 54.2}});
+    // Two models: headwind (ICON) and beam wind (GFS).
+    const auto forecast = [](const QString& id, double from) {
+      ModelForecast f;
+      f.model = id;
+      f.points = {{10.0, 54.0}, {10.0, 54.2}};
+      const qint64 t0 = QDateTime::currentSecsSinceEpoch() - 3600;
+      for (int h = 0; h < 120; ++h) f.times << t0 + h * 3600;
+      for (int p = 0; p < 2; ++p) {
+        f.speedKn << QVector<float>(120, 14);
+        f.dirFrom << QVector<float>(120, float(from));
+        f.gustKn << QVector<float>(120, 18);
+      }
+      f.fetched = QDateTime::currentDateTimeUtc();
+      return f;
+    };
+    passage->setForecasts({{"icon_seamless", forecast("icon_seamless", 0)},
+                           {"gfs_seamless", forecast("gfs_seamless", 270)}},
+                          true);
+    QTest::qWait(400);
+    QCOMPARE(passage->source(), QStringLiteral("icon_seamless"));
+    QVERIFY(passage->plan().tacks > 0);
+    QVERIFY(passage->plan().gribUsed);
+    auto* matrix = passage->findChild<ModelMatrix*>();
+    QVERIFY(matrix);
+    // ICON, GFS and manual wind.
+    QVERIFY(matrix->height() >= 3 * 28);
+    // State for stored voyages.
+    const QJsonObject state = passage->saveState();
+    QCOMPARE(state.value("source").toString(), QStringLiteral("icon_seamless"));
+    passage->restoreState(state);
+    passage->setRoute({});
+  }
+
+  void routesPageStableWhileNavigating() {
+    // A position fix must not rebuild the routes page (it made the page and
+    // the planner on it jump every second).
+    Route r;
+    r.name = "Stable";
+    for (const auto& [lat, lon] :
+         std::initializer_list<std::pair<double, double>>{{54.5, 10.3},
+                                                          {54.6, 10.4}}) {
+      Waypoint w;
+      w.lat = lat;
+      w.lon = lon;
+      r.points << w;
+    }
+    const QString id = NavStore::instance().addRoute(r);
+    NavStore::instance().activateRoute(id, 1);
+    QTest::qWait(50);
+    auto* page = m_win->findChild<RoutesPage*>();
+    QVERIFY(page);
+    const QList<ListRow*> rows = page->findChildren<ListRow*>();
+    QVERIFY(!rows.isEmpty());
+    QList<QPointer<ListRow>> watched;
+    for (ListRow* row : rows) watched << row;
+    OwnShip own = NavStore::instance().ownShip();
+    for (int i = 0; i < 5; ++i) {
+      own.lat += 0.001;
+      own.lastFix = QDateTime::currentDateTimeUtc();
+      NavStore::instance().setOwnShip(own);
+      QTest::qWait(20);
+    }
+    for (const auto& row : watched) QVERIFY(row);
+    // Stopping the navigation does rebuild it.
+    NavStore::instance().stopNavigation();
+    QTest::qWait(50);
+    bool rebuilt = false;
+    for (const auto& row : watched) rebuilt |= row.isNull();
+    QVERIFY(rebuilt);
+  }
+
+  void boatView() {
+    m_win->setView(MainWindow::View::Boat);
+    auto* view = m_win->findChild<BoatView*>();
+    QVERIFY(view && view->isVisible());
+    auto* cabin = view->findChild<CabinLayout*>();
+    QVERIFY(cabin && cabin->width() > 300);
+    auto& sys = BoatSystems::instance();
+    const auto isOn = [&sys](const QString& id) {
+      for (const auto& l : sys.lights())
+        if (l.id == id) return l.on;
+      return false;
+    };
+    // Tapping a light in the layout switches it.
+    const bool before = isOn("galley_spot");
+    QTest::mouseClick(cabin, Qt::LeftButton, {},
+                      cabin->lightPos("galley_spot").toPoint());
+    QCOMPARE(isOn("galley_spot"), !before);
+    // The night sailing button applies the scene.
+    for (auto* b : view->findChildren<QPushButton*>())
+      if (b->property("scene").toString() == "night") b->click();
+    QCOMPARE(sys.activeScene(), QStringLiteral("night"));
+    QTest::qWait(200);
+    const QString shot = qEnvironmentVariable("OCPN_QT_TEST_BOAT_SHOT");
+    if (!shot.isEmpty()) m_win->grab().save(shot);
+    sys.applyScene("evening");
+    m_win->setView(MainWindow::View::Chart);
+  }
+
+  void polarEditorRoundTrip() {
+    Polar p = Polar::generic(7.5);
+    PolarEditor editor(p);
+    Polar out;
+    QString err;
+    QVERIFY2(editor.result(&out, &err), qPrintable(err));
+    QCOMPARE(out.tws, p.tws);
+    QCOMPARE(out.twa, p.twa);
+    QVERIFY(std::fabs(out.speedAt(12, 90) - p.speedAt(12, 90)) < 0.01);
+  }
+
+  void poiClassification() {
+    const auto kind = [](std::initializer_list<std::pair<QString, QString>> t) {
+      OsmElement e;
+      for (const auto& [k, v] : t) e.tags.insert(k, v);
+      return OsmPoiLayer::classify(e);
+    };
+    using K = OsmPoiLayer::Kind;
+    QCOMPARE(kind({{"leisure", "marina"}}), K::Marina);
+    QCOMPARE(kind({{"seamark:type", "harbour"},
+                   {"seamark:harbour:category", "marina"}}),
+             K::Marina);
+    QCOMPARE(kind({{"seamark:type", "harbour"}}), K::Harbour);
+    QCOMPARE(kind({{"waterway", "fuel"}}), K::Fuel);
+    QCOMPARE(kind({{"leisure", "slipway"}}), K::Slipway);
+    QCOMPARE(kind({{"seamark:type", "anchorage"}}), K::Anchorage);
+    QCOMPARE(kind({{"seamark:type", "buoy_lateral"}}), K::Seamark);
+    QCOMPARE(kind({{"name", "x"}}), K::Other);
+    QVERIFY(OsmPoiLayer::queryFor(GeoBox{54, 10, 54.1, 10.2})
+                .contains("[bbox:54.000000,10.000000,54.100000,10.200000]"));
   }
 
   void screenToGeoRoundTrip() {

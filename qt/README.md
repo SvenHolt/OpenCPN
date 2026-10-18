@@ -26,6 +26,14 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![ENC](doc/screenshot-enc.png) | ![Wetter](doc/screenshot-weather.png) |
 | **Gezeiten · Tag** | **Aktive Route · Nacht** |
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
+| **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
+| ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
+| **Bordsysteme · Nachtfahrt** | |
+| ![Boot](doc/screenshot-boat.png) | |
+| **Wettermodelle × Abfahrtszeit** | **Polardaten** |
+| ![Modelle](doc/screenshot-models.png) | ![Polare](doc/screenshot-polar.png) |
+| **Kartenausschnitt für Offline-Daten wählen** | **Offline-Gebiete · lokale Overpass-Instanz** |
+| ![Auswahl](doc/screenshot-offline-select.png) | ![Offline](doc/screenshot-offline.png) |
 
 ## Funktionsumfang
 
@@ -42,10 +50,19 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **GRIB1/GRIB2**: Wind, Böen, Luftdruck, Wellen; Zeitleiste und Animation | ✅ |
 | **NOAA-GFS-Download** (0,25°) für den sichtbaren Bereich | ✅ |
 | **Track-Aufzeichnung** mit Ausdünnung, GPX-Import/-Export | ✅ |
+| **Offline-Gebiete**: Kartenausschnitt wählen, OSM-Daten laden, **lokale Overpass-Instanz** (osm-3s) | ✅ |
+| Häfen, Marinas, Tankstellen, Slipanlagen und Seezeichen aus OSM auf der Karte, Offline-Suche | ✅ |
 | **Plugin-API** (Qt-Plugins) mit **Media-Plugin** (Spotify, YouTube Music) | ✅ |
 | NMEA 0183: RMC, GGA, GLL, VTG, HDT, THS inkl. Checksumme | ✅ |
 | AIS: Typen 1/2/3, 5, 18, 19, 24; CPA/TCPA und Kollisionsalarm | ✅ |
 | Datenquellen: UDP, TCP, seriell, Simulator; Datenmonitor | ✅ |
+| **Routenplanung von Hafen zu Hafen** (automatisch über Wasser, Land und Molen werden umfahren) | ✅ |
+| **Törnplanung**: Zeitfenster, Segel-/Motoranteil, Wenden/Halsen, Dauer, Ankunft, Diesel, Tageslicht (GRIB-Wind) | ✅ |
+| **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
+| **Polardaten**: Import (.pol/.csv/Expedition), Tabelleneditor, Diagramm, optimale Kreuz-/Vorwindwinkel | ✅ |
+| **Wettermodelle vergleichen** (ICON, GFS, ECMWF, Météo-France, GRIB, manuell) × Abfahrtszeiten | ✅ |
+| **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
+| **Reisen offline speichern** (Route, Planung, Modelle, GRIB, Häfen und Küste entlang der Route) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
 | GPX-Import/-Export (auch OpenCPN `navobj.xml`) | ✅ |
 | S-63 (verschlüsselte ENC), CM93 | ❌ siehe Grenzen |
@@ -154,6 +171,244 @@ berechnet.
   Bodendruck, 0–72 h in 3-Stunden-Schritten) direkt von NOMADS für den
   sichtbaren Kartenausschnitt.
 
+### Bordsysteme (Ansicht „Boot“)
+
+Dritte Ansicht im Dock neben Cockpit und Karte (Taste `B`):
+
+* **Kabinen-Layout** einer 28-Fuß-Yacht im Stil der Dufour 2800, von oben:
+  * Bugkabine mit V-Koje, Salon mit Sitzbänken, Tisch und Kartentisch,
+    Pantry, Bad, Hundekoje (Achterkabine) und Cockpit.
+  * Jeder Raum ist nach seiner Temperatur eingefärbt (blau kalt, orange
+    warm). Außentemperatur im Cockpit.
+  * Leuchten erscheinen in ihrer Farbe und Helligkeit. Ein Tipp auf eine
+    Leuchte schaltet sie, ebenso die Positionslaternen (rot/grün/weiß),
+    Dampferlicht, Ankerlicht und Decksstrahler.
+  * Frischwasser-, Fäkalien- und Dieseltank mit Füllstand; Batteriebank
+    unter der Salonbank; Solarpaneele am Heckbügel mit aktueller Leistung;
+    Landstromanschluss am Heck.
+  * Webasto mit den Warmluftleitungen in die Räume (orange beim Heizen).
+* **Lichtszenen:** Nachtfahrt (rot, stark gedimmt, nur Salon, Kartentisch,
+  Fußbodenlicht, Pantry, Bad), Abend (warmweiß 50 %), Hell, Vor Anker
+  (Ankerlicht an, Positionslaternen aus, Salon indirekt) und Alles aus.
+  Positionslaternen schalten die Szenen nicht mit. Das Modell kennt je LED
+  Helligkeit und Farbe; die Bedienung pro LED folgt mit der digitalen
+  Schaltung.
+* **Energie (Victron):** Ladezustand, Spannung, Strom und Restlaufzeit der
+  Batteriebank (SmartShunt), Solar (MPPT-Zustand, Tagesertrag), Landstrom
+  mit Ladegerät (MultiPlus), Verbraucher gesamt.
+* **Heizung (Webasto Air Top):**
+  * Ein/Aus und Solltemperatur.
+  * Zustände: Start, Heizen, Lüften, Nachlauf, Störung.
+  * Werte: Leistung, Ausblastemperatur, Dieselverbrauch, Spannung,
+    Betriebsstunden.
+* **Tanks** und **Verbraucher** (Kühlschrank, Wasserpumpe, Instrumente,
+  Plotter, UKW, Autopilot, Steckdosen, Stereo, Wechselrichter,
+  Bilgepumpe) mit Schaltern.
+
+Noch sind alle Werte **simuliert**: Temperaturen folgen Tagesgang und
+Heizung, die Batterie reagiert auf Verbraucher, Sonnenstand und Landstrom,
+und Tanks leeren sich. Jeder Wert und jeder Schalter trägt bereits seinen
+Signal-K-Pfad (`environment.inside.<raum>.temperature`,
+`tanks.freshWater.0.currentLevel`, `electrical.switches.<id>.state` …).
+Die Signal-K-Anbindung und die Elektronik folgen später.
+
+### Routenplanung von Hafen zu Hafen
+
+Oben auf der Seite **Routen**:
+
+1. **Start** und **Ziel** eingeben. Vorgeschlagen werden die eigene
+   Position, Markierungen und, aus den Offline-Gebieten, Marinas, Häfen,
+   Ankerplätze und Orte. Alternativ per Rechtsklick auf die Karte
+   „Route von hier“ bzw. „Route hierher“ wählen.
+2. **Route planen**: Die App berechnet den kürzesten Weg über Wasser und
+   zeigt ihn gestrichelt als Vorschau, mit Distanz, Fahrzeit bei der
+   eingestellten Geschwindigkeit und Anzahl der Wegpunkte.
+3. **Speichern** oder **Speichern und navigieren**. Die Wegpunkte heißen
+   wie Start und Ziel, dazwischen WP01, WP02 …
+
+So rechnet der Planer:
+
+* Das Gebiet um Start und Ziel wird als Raster erfasst (bis 700 Zellen je
+  Seite, mindestens etwa 20 m pro Zelle).
+* Land kommt aus der Basiskarte. In Offline-Gebieten stammen die
+  Küstenlinie (`natural=coastline`, Land liegt links) und Molen/Buhnen aus
+  der lokalen Overpass-Instanz. Sie sind viel genauer, und dort wird die
+  Basiskarte ignoriert.
+* A* sucht mit Abstand zum Ufer. Danach wird der Weg auf die nötigen
+  Wendepunkte begradigt.
+* Liegen Start oder Ziel an Land (z. B. die Mitte einer Marina), wird die
+  nächste erreichbare Wasserfläche gewählt.
+
+#### Polardaten
+
+Unter **Segel → Polare** liegt die Polare des Bootes:
+
+* **Import** der üblichen Formate:
+  * Tabellen von OpenCPN, qtVlm und ORC, auch als CSV mit Semikolon und
+    Dezimalkomma. Die erste Zeile enthält die Windgeschwindigkeiten, die
+    erste Spalte die Windwinkel.
+  * Expedition: eine Zeile pro Windstärke im Format
+    „TWS Winkel Fahrt Winkel Fahrt …“.
+* **Bearbeiten:** Tabelleneditor mit Zeilen und Spalten zum Hinzufügen und
+  Entfernen. Die Eingaben werden beim Speichern geprüft (Werte aufsteigend,
+  Winkel 0–180°).
+* **Export** als `.pol`.
+* **Generisch:** eine Fahrtenyacht-Polare, skaliert auf die beste Fahrt.
+* **Diagramm:** Kurven für 6–25 kn, die Punkte markieren den besten VMG
+  am Wind und vor dem Wind.
+
+Der Törnplaner rechnet mit der Polare (bilinear interpoliert). Kreuz- und
+Vorwindwinkel sind die Winkel mit dem besten VMG bei der jeweiligen
+Windstärke.
+
+#### Wettermodelle und Abfahrtszeit
+
+Nach der Routenberechnung lädt die App bei Verbindung automatisch die
+stündlichen Windvorhersagen von **ICON (DWD)**, **GFS (NOAA)**,
+**ECMWF IFS** und **Météo-France** für Punkte entlang der Route
+(Open-Meteo, 7 Tage). Die Matrix zeigt für jede Quelle die Abfahrten im
+Zeitfenster:
+
+* Zeilen: die Modelle, eine geladene GRIB-Datei und der manuelle Wind.
+* Spalten: die Abfahrtszeiten im Zeitfenster.
+* Zellfarbe: Segelanteil. Zelltext: Dauer. Unterer Rand: Nachtanteil.
+* Grün umrandet ist die beste Abfahrt je Quelle, weiß die gewählte. Ein
+  Tipp wählt Quelle und Abfahrt für die Detailansicht.
+* Darüber steht, wie weit die Modelle für die gewählte Abfahrt
+  auseinanderliegen.
+
+#### Reisen offline speichern
+
+**„Reise für offline speichern“** legt die Reise unter
+`voyages/<id>/voyage.json` im Benutzerdatenordner ab und lädt nach:
+
+1. Vorhersagen aller Wettermodelle entlang der Route.
+2. Eine Kopie der geöffneten GRIB-Datei.
+3. Häfen, Marinas und Seezeichen in Kacheln entlang der Route (±5 sm).
+   Sie werden ohne Ablaufdatum gespeichert.
+4. Offline-Regionen (Küste, Häfen) entlang der Route (±3 sm) für die lokale
+   Overpass-Instanz. Sie werden nacheinander geladen und am Ende einmal
+   importiert.
+
+Unter **Reisen (offline)** auf der Routen-Seite öffnet ein Tipp die Reise
+mit Route, Eingaben und den gespeicherten Vorhersagen, auch ohne Internet.
+Mit Verbindung werden die Vorhersagen frisch geladen. „Aktualisieren“
+lädt fehlende oder neue Daten nach.
+
+#### Suche
+
+Für die erste Planung fragt die Suche zuerst Online-Quellen: Nominatim
+und Overpass (Marinas, Häfen, Ankerplätze im Umkreis der Karte). Danach
+kommen die lokale Overpass-Instanz und die gespeicherten Hafenkacheln.
+Ohne Netz findet sie so weiterhin die Häfen entlang gespeicherter Reisen
+und kürzlich angesehener Gebiete.
+
+#### Törnplanung
+
+Nach der Berechnung zeigt der Bereich **Törn**:
+
+* **Abfahrt** und **Zeitfenster** (nur diese Zeit oder die nächsten
+  6/12/24/48/72 Stunden). Im Fenster rechnet die App jede halbe bis
+  zwei Stunden eine Abfahrt durch und wählt die beste nach **schnellster
+  Fahrt**, **meistem Segeln** oder **Tageslicht**. Die Zeitleiste zeigt
+  alle Abfahrten: Höhe = Dauer, Blau = Segelanteil, dunkel = Nachtanteil.
+  Ein Tipp auf einen Balken wählt diese Abfahrt.
+* **Antrieb:** Segeln (Motor nur bei Flaute oder zu wenig Fahrt),
+  Motorsegeln (jeweils das Schnellere) oder Motor. Voreinstellung ist die
+  Antriebsart der Segelkonfiguration.
+* **Wind** aus der geladenen **GRIB-Vorhersage**, entlang der Route und in
+  der Zeit interpoliert. Ohne GRIB oder außerhalb davon gilt der manuell
+  eingegebene Wind; vorbelegt wird der aktuelle wahre Wind der Instrumente.
+* **Ergebnis:** Dauer, Ankunft, Segel-/Motoranteil, Wenden und Halsen,
+  gesegelte Distanz (mit Kreuzschlägen), Diesel (Verbrauch aus der
+  Motoreinstellung), Nachtstunden, Sonnenuntergang am Ziel.
+* **Warnungen:** Starkwind ab 25 kn, Sturm ab 30 kn, Ankunft im Dunkeln,
+  GRIB deckt den Törn nicht ganz ab, Diesel wird knapp.
+* **Etappen:** Kurs, Distanz, Fahrmodus (Segeln, Kreuzen, Vorwind,
+  Motor), Wenden/Halsen, Zeiten, Wind und TWA. Auf der Karte ist jede
+  Etappe nach Fahrmodus eingefärbt.
+
+So wird gerechnet: Die Bootsgeschwindigkeit stammt aus der Polare des
+Bootes (siehe oben). Gekreuzt bzw. gehalst wird mit den Winkeln des besten
+VMG. Pro Schlaglänge von
+etwa 1,5 sm wird eine Wende gezählt. Der Wind wird alle 2 sm neu bestimmt.
+Beim Speichern erhalten die Wegpunkte ETA bzw. ETD und Fahrmodus.
+
+Tiefen, Fahrwasser, Sperrgebiete und Brücken werden dabei **nicht**
+berücksichtigt. Die Route ist ein Vorschlag und muss vor der Fahrt auf der
+Seekarte geprüft werden.
+
+Passen nicht alle Bereiche ins Dock, landen die hinteren unter **Mehr**.
+
+### Häfen online nachladen
+
+Mit Netzwerkverbindung (abschaltbar unter Offline → „Häfen online laden“):
+
+* **Karte:** Für den sichtbaren Ausschnitt lädt die App Häfen, Marinas,
+  Tankstellen, Slipanlagen, Ankerplätze und Seezeichen in Kacheln von
+  0,1° × 0,1° über öffentliche Overpass-Server nach, während man die Karte
+  verschiebt. Kacheln werden 14 Tage auf der Festplatte zwischengespeichert
+  und sind danach auch ohne Netz da.
+* **Server:** overpass-api.de, overpass.kumi.systems und
+  overpass.private.coffee (in den Einstellungen `Overpass/onlineServers`
+  änderbar). Antwortet einer nicht innerhalb von 6 s, wird parallel der
+  nächste gefragt, die erste gültige Antwort zählt. Ohne Verbindung wird
+  es nach einer Minute erneut versucht.
+* **Suche:** Start und Ziel findet die App zusätzlich über Nominatim
+  (OpenStreetMap-Ortssuche, höchstens eine Anfrage pro Sekunde, Ergebnisse
+  nahe der Karte zuerst).
+* **Routenplanung:** Ohne Offline-Gebiet holt sie die Küstenlinie und die
+  Molen für das Planungsgebiet online.
+* Offline-Gebiete der lokalen Overpass-Instanz haben immer Vorrang.
+
+### Offline-Gebiete und lokale Overpass-Instanz
+
+Unter **Offline** legt man Gebiete an, deren OpenStreetMap-Daten (Häfen,
+Marinas, Tankstellen, Slipanlagen, Seezeichen, Küste, Orte) lokal
+gespeichert und in eine **eigene Overpass-API-Instanz** importiert werden.
+Abfragen laufen danach ohne Internet.
+
+**Kartenausschnitt wählen** („Bereich auf Karte wählen“, Rechtsklick →
+„Gebiet offline speichern…“):
+
+* Ein Rahmen liegt über der Karte, der Bereich außerhalb wird abgedunkelt.
+* **Ecken und Kanten ziehen** ändert die Größe, **im Rahmen ziehen**
+  verschiebt ihn, **außerhalb ziehen** schwenkt die Karte; Zoomen geht wie
+  gewohnt. Alles ist auch per Touch bedienbar.
+* Die Leiste oben zeigt Breite × Höhe und Fläche und bietet
+  Vorlagen: **Sichtbarer Bereich**, **Um das Boot** (± 8 sm) und
+  **Entlang der Route** (aktive oder letzte Route, 3 sm Rand).
+* Schon geladene Gebiete werden grün gestrichelt angezeigt.
+* Name eingeben, **Laden** – Fortschritt und Abbruch auf der Offline-Seite.
+
+**Download:** zuerst über einen Overpass-Server (Standard:
+`overpass-api.de`, einstellbar). Ist er nicht erreichbar, lädt die App
+kleinere Gebiete (bis 0,25 Quadratgrad) kachelweise über die
+OpenStreetMap-API und teilt zu volle Kacheln automatisch. Eigene
+`.osm`-Dateien lassen sich importieren (Kommandozeile: `--import-osm`).
+Die Kacheln werden zusammengeführt (IDs eindeutig und sortiert) und als
+`regions/<id>.osm` gespeichert; alle Gebiete zusammen ergeben
+`combined.osm`.
+
+**Overpass-Backend** (Offline → Overpass-Einstellungen):
+
+| Backend | Plattform | Einrichtung |
+| --- | --- | --- |
+| **Lokal (osm-3s)** | Linux, macOS | `-DOCPN_QT_BUILD_OSM3S=ON` baut `update_database`, `osm3s_query` und `dispatcher` mit (Overpass 0.7.62.11, braucht `libexpat1-dev zlib1g-dev`, optional `liblz4-dev`) und installiert sie nach `libexec/osm-3s/bin`. Gefunden wird osm-3s auch über `OPENCPN_OSM3S_BIN`, den `PATH` oder `~/.local/osm-3s/bin`. |
+| **HTTP** | alle, v. a. Windows | `docker compose -f qt/docker/overpass/docker-compose.yml up -d` startet das Image `wiktorn/overpass-api`, das `combined.osm` importiert und unter `http://localhost:12345/api/interpreter` antwortet. Ebenso geht jeder andere Overpass-Server. |
+
+Beim lokalen Backend ruft die App nach jeder Änderung
+`update_database --db-dir=… --meta=no` mit `combined.osm` auf und fragt die
+Datenbank direkt mit `osm3s_query` ab, ein Dispatcher-Dienst ist nicht nötig.
+Die Daten liegen im Benutzerdatenordner unter `overpass/` (Linux:
+`~/.local/share/opencpn/opencpn-qt/overpass`).
+
+Auf der Karte zeigt die Ebene **OSM-Details** ab Hafenmaßstab Marinas,
+Häfen, Tankstellen, Ankerplätze und Slipanlagen, bei noch größerem Maßstab
+auch Tonnen und Baken in ihrer Farbe. Überlappende Symbole und Beschriftungen
+werden ausgeblendet. Die **Offline-Suche** findet Namen (auch
+`seamark:name`) in allen Gebieten; ein Tipp auf das Ergebnis zeigt den Ort.
+
 ### Plugins und Media-Plugin
 
 Die Plugin-API (`src/api/OcpnPlugin.h`) basiert auf Qt-Plugins
@@ -206,11 +461,13 @@ Voraussetzungen:
 ```bash
 # Debian/Ubuntu
 sudo apt install qt6-base-dev qt6-svg-dev libqt6serialport6-dev dbus
+# für die lokale Overpass-Instanz zusätzlich
+sudo apt install libexpat1-dev zlib1g-dev liblz4-dev
 
-cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release
+cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release -DOCPN_QT_BUILD_OSM3S=ON
 cmake --build build-qt -j
 ./build-qt/opencpn-qt --demo        # Simulator und Demo-Route
-(cd build-qt && ctest)              # Unit-, Karten-, GRIB-, Media- und UI-Tests
+(cd build-qt && ctest)              # Unit-, Karten-, GRIB-, OSM-, Planungs-, Media- und UI-Tests
 ```
 
 Daten (Basiskarte, `s57data`, `tcdata`) werden automatisch im Quellbaum
@@ -223,14 +480,17 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--charts <ordner>` | fügt einen Kartenordner hinzu |
 | `--grib <datei>` | öffnet eine GRIB-Datei |
 | `--center lat,lon[,maßstab]` | zentriert die Karte, z. B. `40.84,-73.93,15000` |
-| `--view cockpit\|chart` | Startansicht |
+| `--view cockpit\|chart\|boat` | Startansicht |
 | `--day` | startet im Tagmodus |
 | `--page N` | öffnet das Seitenpanel N (0 Karten, 1 Routen …) |
+| `--import-osm datei.osm` | importiert eine OSM-XML-Datei als Offline-Gebiet |
+| `--select-area` | startet die Auswahl eines Kartenausschnitts |
 | `--fresh` | nutzt temporäre Einstellungen und Daten; die echte Konfiguration bleibt unberührt |
 | `--screenshot datei.png [--size 1600x1000] [--delay ms]` | speichert einen Screenshot und beendet das Programm, auch mit `QT_QPA_PLATFORM=offscreen` |
 
 Tastatur: `+`/`-` zoomen, `F` folgt dem Schiff, `F11` schaltet Vollbild um,
-`Esc` schließt das Panel bzw. bricht die Routeneingabe ab, `Backspace`
+`Esc` schließt das Panel bzw. bricht die Routeneingabe oder die
+Gebietsauswahl ab, `Backspace`
 entfernt den letzten Routenpunkt. Ein Rechtsklick auf die Karte öffnet das
 Kontextmenü.
 
@@ -261,6 +521,10 @@ aktiv.
   ist bisher nur unter Linux/macOS getestet.
 * Media: Unter Windows und macOS gibt es noch keine Systemmediensteuerung;
   dort funktioniert nur die Spotify-Web-API.
+* Overpass: osm-3s lässt sich nicht unter Windows bauen, dort bleibt Docker
+  (HTTP-Backend). Gebiete werden komplett neu importiert, Minutendiffs werden
+  nicht eingespielt („Aktualisieren“ lädt das Gebiet neu). Die OSM-Daten
+  ersetzen keine amtliche Seekarte.
 
 ## Architektur
 
@@ -276,6 +540,14 @@ qt/
 │   ├── GpxIO, TrackRecorder
 │   ├── Tides              harmonische Gezeitenvorhersage
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
+│   ├── RoutePlanner       Routing über Wasser (Raster, A*, Begradigung)
+│   ├── PassagePlanner     Törnplanung (Polare, Kreuzen, Zeitfenster, Sonne)
+│   ├── Polar              Polardaten (Formate, Interpolation, VMG)
+│   ├── WeatherModels      Modellvorhersagen entlang der Route (Open-Meteo)
+│   ├── Voyage             gespeicherte Reisen und Offline-Vorbereitung
+│   ├── BoatSystems        Bordsysteme (Räume, Tanks, Victron, Webasto, Licht)
+│   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge,
+│   │                      OnlineOsm (öffentliche Server, Kachel-Cache, Nominatim)
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
 ├── src/ui/                Widgets (libocpnqt_ui.so)
 │   ├── Theme, Icons, GlassPanel
@@ -283,9 +555,16 @@ qt/
 │   ├── ChartView, MapLayer   Karte (Render-Thread) + Overlay-Ebenen
 │   ├── Overlays, SideDrawer, DrawerPages
 │   ├── TracksPage, TidesPage, WeatherPage
+│   ├── OfflinePage        Gebietsauswahl-Leiste, Offline-Seite, OSM-Ebene
+│   ├── RoutePlanPanel     Routenplanung von Hafen zu Hafen
+│   ├── PassagePanel       Törnplanung, Modell-Matrix, Etappen
+│   ├── PolarPanel         Polardiagramm, Import, Tabelleneditor
+│   ├── VoyageList         Reisen (offline)
+│   ├── BoatView           Ansicht „Boot“: Kabinen-Layout und Systemkarten
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)
+├── docker/overpass/       Overpass-API als Docker-Container (HTTP-Backend)
 └── tests/                 QtTest-Suiten + Testdaten (tests/data)
 ```
 

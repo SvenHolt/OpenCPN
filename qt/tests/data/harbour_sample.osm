@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand made test data (fictional objects near Kiel). -->
+<osm version="0.6" generator="opencpn-qt tests">
+  <bounds minlat="54.3500" minlon="10.1500" maxlat="54.3700" maxlon="10.1800"/>
+  <node id="101" lat="54.3600" lon="10.1600" version="1"/>
+  <node id="102" lat="54.3600" lon="10.1640" version="1"/>
+  <node id="103" lat="54.3630" lon="10.1640" version="1"/>
+  <node id="104" lat="54.3630" lon="10.1600" version="1"/>
+  <node id="201" lat="54.3650" lon="10.1700" version="1">
+    <tag k="seamark:type" v="buoy_lateral"/>
+    <tag k="seamark:buoy_lateral:colour" v="red"/>
+    <tag k="seamark:name" v="Testtonne 7"/>
+  </node>
+  <node id="202" lat="54.3610" lon="10.1650" version="1">
+    <tag k="waterway" v="fuel"/>
+    <tag k="name" v="Bootstankstelle Test"/>
+  </node>
+  <node id="203" lat="54.3550" lon="10.1550" version="1">
+    <tag k="leisure" v="slipway"/>
+  </node>
+  <way id="301" version="1">
+    <nd ref="101"/>
+    <nd ref="102"/>
+    <nd ref="103"/>
+    <nd ref="104"/>
+    <nd ref="101"/>
+    <tag k="leisure" v="marina"/>
+    <tag k="name" v="Testhafen Düsternbrook"/>
+  </way>
+</osm>

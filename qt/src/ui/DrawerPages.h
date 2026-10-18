@@ -11,6 +11,7 @@ class QLabel;
 class QSpinBox;
 class QVBoxLayout;
 class QStackedWidget;
+class RoutePlanPanel;
 
 /** Hoverable, clickable rounded row used by all lists. */
 class ListRow : public QWidget {
@@ -46,10 +47,13 @@ protected:
   void addRow(QWidget* row);
   void setEmptyText(const QString& text);
   QVBoxLayout* actions() const { return m_actions; }
+  /** A widget scrolling together with the list, above the rows. */
+  void setHeader(QWidget* header);
 
 private:
   QVBoxLayout* m_actions;
   QVBoxLayout* m_rows;
+  QVBoxLayout* m_content;
   QLabel* m_empty;
 };
 
@@ -57,6 +61,7 @@ class RoutesPage : public ListPage {
   Q_OBJECT
 public:
   explicit RoutesPage(ChartView* chart, QWidget* parent = nullptr);
+  RoutePlanPanel* planner() const { return m_planner; }
 
 signals:
   void newRouteRequested();
@@ -66,6 +71,8 @@ private:
   void importGpx();
   void exportGpx();
   ChartView* m_chart;
+  RoutePlanPanel* m_planner;
+  QString m_shownActive;  // active route the list shows
 };
 
 class MarksPage : public ListPage {

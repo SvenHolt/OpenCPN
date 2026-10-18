@@ -28,9 +28,12 @@
 #include "core/GpxIO.h"
 #include "core/charts/ChartDatabase.h"
 #include "core/NavStore.h"
+#include "core/Voyage.h"
 #include "ui/ChartView.h"
 #include "ui/GlassPanel.h"
 #include "ui/Icons.h"
+#include "ui/RoutePlanPanel.h"
+#include "ui/VoyageList.h"
 #include "ui/Overlays.h"
 #include "ui/PluginManager.h"
 #include "ui/Theme.h"
@@ -137,6 +140,7 @@ ListPage::ListPage(QWidget* parent) : QWidget(parent) {
   auto* content = new QWidget;
   content->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
   auto* cl = new QVBoxLayout(content);
+  m_content = cl;
   cl->setContentsMargins(0, 0, 8, 0);
   cl->setSpacing(8);
   m_rows = new QVBoxLayout;
@@ -172,30 +176,59 @@ void ListPage::addRow(QWidget* row) {
   m_empty->hide();
 }
 
+void ListPage::setHeader(QWidget* header) {
+  m_content->insertWidget(0, header);
+}
+
 void ListPage::setEmptyText(const QString& text) { m_empty->setText(text); }
 
 // --------------------------------------------------------------------------
 
 RoutesPage::RoutesPage(ChartView* chart, QWidget* parent)
     : ListPage(parent), m_chart(chart) {
-  auto* add = button(tr("New route"), "plus", "primary");
-  connect(add, &QPushButton::clicked, this, &RoutesPage::newRouteRequested);
-  actions()->addWidget(add);
+  m_planner = new RoutePlanPanel(chart);
+  auto* header = new QWidget;
+  auto* hl = new QVBoxLayout(header);
+  hl->setContentsMargins(0, 0, 0, 0);
+  hl->setSpacing(10);
+  hl->addWidget(m_planner);
+  auto* voyages = new VoyageList;
+  connect(voyages, &VoyageList::openRequested, this, [this](const QString& id) {
+    if (const Voyage* v = VoyageStore::instance().voyage(id))
+      m_planner->openVoyage(*v);
+  });
+  hl->addWidget(voyages);
+  hl->addWidget(label(tr("SAVED ROUTES"), "section"));
+  setHeader(header);
   auto* io = new QHBoxLayout;
-  auto* imp = button(tr("Import GPX"), "import");
-  auto* exp = button(tr("Export GPX"), "export");
+  auto* add = button(tr("Draw"), "edit");
+  add->setToolTip(tr("Draw a route by tapping points on the chart"));
+  connect(add, &QPushButton::clicked, this, &RoutesPage::newRouteRequested);
+  auto* imp = button(tr("Import"), "import");
+  auto* exp = button(tr("Export"), "export");
+  imp->setToolTip(tr("Import GPX"));
+  exp->setToolTip(tr("Export GPX"));
   connect(imp, &QPushButton::clicked, this, &RoutesPage::importGpx);
   connect(exp, &QPushButton::clicked, this, &RoutesPage::exportGpx);
+  io->addWidget(add);
   io->addWidget(imp);
   io->addWidget(exp);
   actions()->addLayout(io);
   setEmptyText(
-      tr("No routes yet.\nCreate one by tapping points on the "
-         "chart, or import a GPX file."));
+      tr("No routes yet.\nPlan one from harbour to harbour above, draw it "
+         "on the chart or import a GPX file."));
 
   auto& store = NavStore::instance();
   connect(&store, &NavStore::routesChanged, this, &RoutesPage::rebuild);
-  connect(&store, &NavStore::guidanceChanged, this, &RoutesPage::rebuild);
+  // Guidance updates with every position fix; the list only shows which
+  // route is active, so it is rebuilt only when that changes (a rebuild
+  // makes the page, planner included, jump).
+  connect(&store, &NavStore::guidanceChanged, this, [this] {
+    const auto& nav = NavStore::instance();
+    const QString key = nav.guidance().active ? nav.activeRouteId() : QString();
+    if (key == m_shownActive) return;
+    rebuild();
+  });
   connect(&AppSettings::instance(), &AppSettings::changed, this,
           &RoutesPage::rebuild);
   connect(&Theme::instance(), &Theme::changed, this, &RoutesPage::rebuild);
@@ -205,6 +238,7 @@ RoutesPage::RoutesPage(ChartView* chart, QWidget* parent)
 void RoutesPage::rebuild() {
   clearRows();
   const auto& store = NavStore::instance();
+  m_shownActive = store.guidance().active ? store.activeRouteId() : QString();
   const Palette& pal = Theme::p();
   for (const Route& r : store.routes()) {
     const bool active =

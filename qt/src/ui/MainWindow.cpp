@@ -1,15 +1,20 @@
 #include "ui/MainWindow.h"
 
 #include <algorithm>
+#include <cmath>
 #include <QKeyEvent>
 #include <QMenu>
 
 #include "core/AppSettings.h"
 #include "core/NavStore.h"
+#include "core/osm/Overpass.h"
+#include "ui/BoatView.h"
 #include "ui/CockpitView.h"
 #include "ui/DrawerPages.h"
 #include "ui/SailPage.h"
 #include "ui/Icons.h"
+#include "ui/OfflinePage.h"
+#include "ui/RoutePlanPanel.h"
 #include "ui/Overlays.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
@@ -34,7 +39,9 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_controls = new MapControls(m_chart, this);
   m_target = new TargetCard(this);
   m_routeBar = new RouteEditBar(this);
+  m_areaBar = new AreaSelectBar(this);
   m_cockpit = new CockpitView(this);
+  m_boat = new BoatView(this);
   m_toast = new Toast(this);
   m_drawer = new SideDrawer(this);
   m_dock = new BottomDock(this);
@@ -44,6 +51,7 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_instrumentsAnim.setEasingCurve(QEasingCurve::OutCubic);
 
   auto* routes = new RoutesPage(m_chart);
+  m_routes = routes;
   auto* ais = new AisPage(m_chart);
   addSection("chart", tr("Charts"), new ChartsPage(m_chart));
   m_routesSection = addSection("route", tr("Routes"), routes);
@@ -55,6 +63,12 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_chart->addLayer(new TideLayer(this));
   addSection("wind", tr("Weather"), new WeatherPage(m_chart));
   m_chart->addLayer(new GribLayer(this));
+  auto* poi = new OsmPoiLayer(m_chart, this);
+  m_chart->addLayer(poi);
+  auto* offline = new OfflinePage(m_chart, poi);
+  m_offlineSection = addSection("download", tr("Offline"), offline);
+  connect(offline, &OfflinePage::selectAreaRequested, this,
+          &MainWindow::beginAreaSelect);
   auto* timeBar = new WeatherTimeBar;
   timeBar->setProperty("chartOnly", true);
   addOverlay(timeBar, Qt::BottomLeftCorner);
@@ -63,8 +77,9 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   addSection("sliders", tr("Settings"), new SettingsPage);
 
   connect(m_dock, &BottomDock::sectionRequested, m_drawer, &SideDrawer::toggle);
-  connect(m_dock, &BottomDock::viewRequested, this,
-          [this](int v) { setView(v == 0 ? View::Cockpit : View::Chart); });
+  connect(m_dock, &BottomDock::viewRequested, this, [this](int v) {
+    setView(v == 0 ? View::Cockpit : v == 1 ? View::Chart : View::Boat);
+  });
   connect(m_cockpit, &CockpitView::sailConfigRequested, this,
           [this] { m_drawer->open(m_sailSection); });
   connect(m_cockpit, &CockpitView::routesRequested, this,
@@ -93,6 +108,18 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
           [this] { endRouteCreate(false); });
   connect(m_routeBar, &RouteEditBar::done, this,
           [this] { endRouteCreate(true); });
+  connect(m_chart, &ChartView::areaChanged, m_areaBar, &AreaSelectBar::setArea);
+  connect(m_areaBar, &AreaSelectBar::presetRequested, this,
+          &MainWindow::applyAreaPreset);
+  connect(m_areaBar, &AreaSelectBar::cancel, this,
+          [this] { endAreaSelect(false); });
+  connect(m_areaBar, &AreaSelectBar::accepted, this,
+          [this] { endAreaSelect(true); });
+  connect(&OverpassService::instance(), &OverpassService::error, this,
+          [this](const QString& msg) {
+            m_toast->showMessage(msg);
+            layoutOverlays();
+          });
   connect(&NavStore::instance(), &NavStore::alarm, this,
           [this](const QString& msg) {
             m_toast->showMessage(msg);
@@ -110,7 +137,8 @@ MainWindow::~MainWindow() = default;
 void MainWindow::setView(View v) {
   m_view = v;
   m_cockpit->setVisible(v == View::Cockpit);
-  m_dock->setActiveView(v == View::Cockpit ? 0 : 1);
+  m_boat->setVisible(v == View::Boat);
+  m_dock->setActiveView(v == View::Cockpit ? 0 : v == View::Chart ? 1 : 2);
   layoutOverlays();
 }
 
@@ -178,6 +206,8 @@ void MainWindow::layoutOverlays(bool animate) {
   m_chart->setInsets(left, 0);
   m_cockpit->setGeometry(0, 0, w, mapH);
   m_cockpit->setLeftInset(left);
+  m_boat->setGeometry(0, 0, w, mapH);
+  m_boat->setLeftInset(left);
 
   m_instruments->resize(m_instruments->sizeHint());
   const QPoint instPos(left + kGap - kShadow, kGap - kShadow);
@@ -200,6 +230,9 @@ void MainWindow::layoutOverlays(bool animate) {
   m_routeBar->adjustSize();
   m_routeBar->move(freeX + std::max(0, (freeW - m_routeBar->width()) / 2), y);
   if (m_routeBar->isVisible()) y += m_routeBar->height() - kShadow;
+  m_areaBar->adjustSize();
+  m_areaBar->move(freeX + std::max(0, (freeW - m_areaBar->width()) / 2), y);
+  if (m_areaBar->isVisible()) y += m_areaBar->height() - kShadow;
   if (m_view == View::Cockpit) {
     // Between the cockpit's card columns, below the sail plan pill.
     const int cx = (left + w) / 2;
@@ -256,14 +289,17 @@ void MainWindow::layoutOverlays(bool animate) {
   if (m_view == View::Cockpit) m_cockpit->raise();
   for (const auto& o : m_overlays)
     if (!o.first->property("chartOnly").toBool()) o.first->raise();
+  // The boat view uses the whole screen for its cards.
+  if (m_view == View::Boat) m_boat->raise();
   m_drawer->raise();
   m_routeBar->raise();
+  m_areaBar->raise();
   m_toast->raise();
   m_dock->raise();
 }
 
 void MainWindow::showContextMenu(double lat, double lon, const QPoint& global) {
-  if (m_chart->mode() == ChartView::Mode::RouteCreate) return;
+  if (m_chart->mode() != ChartView::Mode::Browse) return;
   const Palette& pal = Theme::p();
   QMenu menu(this);
   menu.addAction(Icons::icon("pin", pal.text, 18), tr("Drop mark here"),
@@ -280,18 +316,107 @@ void MainWindow::showContextMenu(double lat, double lon, const QPoint& global) {
   menu.addAction(Icons::icon("locate", pal.text, 18), tr("Center chart here"),
                  [this, lat, lon] { m_chart->centerOn(lat, lon); });
   menu.addSeparator();
-  menu.addAction(Icons::icon("route", pal.text, 18), tr("New route…"), this,
+  const Place here{
+      tr("Position %1° %2°").arg(lat, 0, 'f', 4).arg(lon, 0, 'f', 4),
+      "position", lat, lon, true};
+  menu.addAction(Icons::icon("locate", pal.text, 18), tr("Route from here"),
+                 this, [this, here] {
+                   m_drawer->open(m_routesSection);
+                   m_routes->planner()->setFrom(here);
+                 });
+  menu.addAction(Icons::icon("flag", pal.text, 18), tr("Route to here"), this,
+                 [this, here] {
+                   m_drawer->open(m_routesSection);
+                   m_routes->planner()->setTo(here);
+                 });
+  menu.addAction(Icons::icon("route", pal.text, 18), tr("Draw route…"), this,
                  &MainWindow::beginRouteCreate);
+  menu.addAction(Icons::icon("download", pal.text, 18),
+                 tr("Save area offline…"), this, [this, lat, lon] {
+                   // Start with a box of about 6 x 4 nm around the click.
+                   const double dLon =
+                       3.0 / (60 * std::max(0.1, std::cos(lat * M_PI / 180)));
+                   beginAreaSelect();
+                   m_chart->setSelectedArea(GeoBox{lat - 2.0 / 60, lon - dLon,
+                                                   lat + 2.0 / 60, lon + dLon});
+                 });
   menu.exec(global);
 }
 
 void MainWindow::beginRouteCreate() {
+  if (m_chart->mode() == ChartView::Mode::AreaSelect) endAreaSelect(false);
   setView(View::Chart);
   m_drawer->close();
   m_chart->startRouteCreate();
   m_routeBar->setPointCount(0);
   m_routeBar->show();
   layoutOverlays();
+}
+
+void MainWindow::beginAreaSelect() {
+  if (m_chart->mode() == ChartView::Mode::RouteCreate) endRouteCreate(false);
+  setView(View::Chart);
+  m_drawer->close();
+  m_areaBar->reset();
+  m_chart->startAreaSelect();
+  m_areaBar->show();
+  layoutOverlays();
+}
+
+void MainWindow::applyAreaPreset(int preset) {
+  const auto pad = [](GeoBox b, double nm) {
+    const double lat = (b.north + b.south) / 2;
+    const double dLon = nm / (60 * std::max(0.1, std::cos(lat * M_PI / 180)));
+    return GeoBox{
+        std::max(-85.0, b.south - nm / 60), std::max(-180.0, b.west - dLon),
+        std::min(85.0, b.north + nm / 60), std::min(180.0, b.east + dLon)};
+  };
+  auto& nav = NavStore::instance();
+  GeoBox box;
+  switch (preset) {
+    case AreaSelectBar::Visible: {
+      // Slightly inside the visible area so all handles stay reachable.
+      box = m_chart->visibleArea();
+      const double h = (box.north - box.south) * 0.06;
+      const double w = (box.east - box.west) * 0.06;
+      box = GeoBox{box.south + h, box.west + w, box.north - h, box.east - w};
+      m_chart->setSelectedArea(box);
+      return;
+    }
+    case AreaSelectBar::AroundBoat: {
+      const auto& own = nav.ownShip();
+      double lat = own.lat, lon = own.lon;
+      if (!own.valid) m_chart->center(lat, lon);
+      box = pad(GeoBox{lat, lon, lat, lon}, 8);
+      break;
+    }
+    case AreaSelectBar::AlongRoute: {
+      const Route* r = nav.route(nav.activeRouteId());
+      if (!r && !nav.routes().isEmpty()) r = &nav.routes().last();
+      if (!r || r->points.isEmpty()) return;
+      box = GeoBox{90, 180, -90, -180};
+      for (const auto& w : r->points)
+        box = GeoBox{std::min(box.south, w.lat), std::min(box.west, w.lon),
+                     std::max(box.north, w.lat), std::max(box.east, w.lon)};
+      box = pad(box, 3);
+      break;
+    }
+  }
+  m_chart->setSelectedArea(box);
+  // Show the frame with some room around it.
+  const GeoBox view = pad(box, std::max(box.heightNm(), box.widthNm()) * 0.25);
+  m_chart->fitGeoBounds(view.south, view.west, view.north, view.east);
+}
+
+void MainWindow::endAreaSelect(bool accept) {
+  const GeoBox box = m_chart->selectedArea();
+  const QString name = m_areaBar->regionName();
+  m_chart->finishAreaSelect();
+  m_areaBar->hide();
+  layoutOverlays();
+  if (!accept || !box.isValid()) return;
+  OverpassService::instance().addRegion(name, box);
+  m_drawer->open(m_offlineSection);
 }
 
 void MainWindow::endRouteCreate(bool save) {
@@ -321,12 +446,17 @@ void MainWindow::keyPressEvent(QKeyEvent* e) {
     case Qt::Key_C:
       setView(m_view == View::Cockpit ? View::Chart : View::Cockpit);
       break;
+    case Qt::Key_B:
+      setView(m_view == View::Boat ? View::Chart : View::Boat);
+      break;
     case Qt::Key_F11:
       setWindowState(windowState() ^ Qt::WindowFullScreen);
       break;
     case Qt::Key_Escape:
       if (m_chart->mode() == ChartView::Mode::RouteCreate)
         endRouteCreate(false);
+      else if (m_chart->mode() == ChartView::Mode::AreaSelect)
+        endAreaSelect(false);
       else
         m_drawer->close();
       break;

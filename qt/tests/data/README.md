@@ -9,3 +9,5 @@ Test data
 * `gfs_simple.grb2`, `gfs_complex.grb2` – NOAA GFS 1° forecast subsets
   (NOMADS, public domain); simple packing and complex packing with spatial
   differencing.
+* `harbour_sample.osm` – small hand made OpenStreetMap XML file (fictional
+  marina, buoy, fuel station and slipway near Kiel) for the Overpass tests.
