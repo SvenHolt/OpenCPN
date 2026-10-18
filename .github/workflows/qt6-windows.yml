@@ -46,7 +46,18 @@ jobs:
 
       - name: Test
         working-directory: build
-        run: ctest -C Release --output-on-failure
+        shell: pwsh
+        run: |
+          ctest -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) {
+            # ctest shows nothing for a test that dies early (e.g. a missing
+            # DLL or an abort); run the suites directly to see why.
+            foreach ($t in Get-ChildItem Release/ocpnqt_*tests.exe) {
+              & $t.FullName -silent
+              "$($t.Name): exit code $LASTEXITCODE"
+            }
+            exit 1
+          }
 
       # Provides VCToolsRedistDir for bundling the MSVC runtime DLLs.
       - name: MSVC environment
