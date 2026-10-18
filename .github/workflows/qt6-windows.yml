@@ -1,0 +1,93 @@
+---
+# Builds a portable Windows package of the Qt6 frontend (OpenCPN-Qt.zip)
+# and publishes it as a workflow artifact and as the "qt-preview" release.
+name: Qt6 frontend Windows package
+
+on:
+  push:
+    branches:
+      - master
+      - 'claude/**'
+    paths:
+      - 'qt/**'
+      - 'data/basemap_shp/**'
+      - 'data/s57data/**'
+      - 'data/tcdata/**'
+      - 'libs/iso8211/**'
+      - 'libs/gdal/**'
+      - 'libs/s57-charts/**'
+      - '.github/workflows/qt6-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          arch: 'win64_msvc2019_64'
+          modules: 'qtserialport'
+          cache: true
+
+      - name: Configure
+        run: >
+          cmake -S qt -B build -A x64
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/OpenCPN-Qt"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        working-directory: build
+        run: ctest -C Release --output-on-failure
+
+      # Provides VCToolsRedistDir for bundling the MSVC runtime DLLs.
+      - name: MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Package
+        shell: pwsh
+        run: |
+          cmake --install build --config Release
+          $root = "${{ github.workspace }}/OpenCPN-Qt"
+          windeployqt --release --no-translations --no-compiler-runtime `
+            "$root/bin/opencpn-qt.exe"
+          # App-local MSVC runtime, so no VC++ redistributable is needed.
+          $crt = Get-ChildItem "$env:VCToolsRedistDir/x64" -Directory `
+            -Filter "Microsoft.VC*.CRT" | Select-Object -First 1
+          Copy-Item "$($crt.FullName)/*.dll" "$root/bin/"
+          New-Item -ItemType Directory -Force "$root/samples" | Out-Null
+          Copy-Item qt/tests/data/* "$root/samples/"
+          Set-Content "$root/OpenCPN Qt starten.bat" `
+            "@echo off`r`nstart `"`" `"%~dp0bin\opencpn-qt.exe`""
+          Set-Content "$root/OpenCPN Qt Demo.bat" `
+            "@echo off`r`nstart `"`" `"%~dp0bin\opencpn-qt.exe`" --demo --charts `"%~dp0samples`""
+          Copy-Item qt/packaging/LIESMICH-Windows.txt "$root/"
+          if (-not (Test-Path "$root/bin/vcruntime140.dll")) {
+            throw "MSVC runtime was not deployed"
+          }
+          Compress-Archive -Path "$root" -DestinationPath OpenCPN-Qt-windows-x64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenCPN-Qt-windows-x64
+          path: OpenCPN-Qt-windows-x64.zip
+
+      - name: Publish preview release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete qt-preview --yes --cleanup-tag || true
+          gh release create qt-preview OpenCPN-Qt-windows-x64.zip \
+            --prerelease --target "${{ github.sha }}" \
+            --title "OpenCPN Qt – Windows Vorschau" \
+            --notes "Automatischer Build von ${{ github.ref_name }} (${{ github.sha }}). ZIP entpacken und 'OpenCPN Qt Demo.bat' starten."
