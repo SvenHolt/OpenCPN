@@ -48,7 +48,7 @@ jobs:
         working-directory: build
         run: ctest -C Release --output-on-failure
 
-      # Sets VCINSTALLDIR so windeployqt bundles the MSVC runtime DLLs.
+      # Provides VCToolsRedistDir for bundling the MSVC runtime DLLs.
       - name: MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
 
@@ -57,8 +57,12 @@ jobs:
         run: |
           cmake --install build --config Release
           $root = "${{ github.workspace }}/OpenCPN-Qt"
-          windeployqt --release --no-translations --compiler-runtime `
+          windeployqt --release --no-translations --no-compiler-runtime `
             "$root/bin/opencpn-qt.exe"
+          # App-local MSVC runtime, so no VC++ redistributable is needed.
+          $crt = Get-ChildItem "$env:VCToolsRedistDir/x64" -Directory `
+            -Filter "Microsoft.VC*.CRT" | Select-Object -First 1
+          Copy-Item "$($crt.FullName)/*.dll" "$root/bin/"
           New-Item -ItemType Directory -Force "$root/samples" | Out-Null
           Copy-Item qt/tests/data/* "$root/samples/"
           Set-Content "$root/OpenCPN Qt starten.bat" `
