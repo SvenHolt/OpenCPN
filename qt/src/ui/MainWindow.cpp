@@ -8,6 +8,7 @@
 #include "core/AppSettings.h"
 #include "core/NavStore.h"
 #include "core/osm/Overpass.h"
+#include "ui/BoatView.h"
 #include "ui/CockpitView.h"
 #include "ui/DrawerPages.h"
 #include "ui/SailPage.h"
@@ -40,6 +41,7 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_routeBar = new RouteEditBar(this);
   m_areaBar = new AreaSelectBar(this);
   m_cockpit = new CockpitView(this);
+  m_boat = new BoatView(this);
   m_toast = new Toast(this);
   m_drawer = new SideDrawer(this);
   m_dock = new BottomDock(this);
@@ -75,8 +77,9 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   addSection("sliders", tr("Settings"), new SettingsPage);
 
   connect(m_dock, &BottomDock::sectionRequested, m_drawer, &SideDrawer::toggle);
-  connect(m_dock, &BottomDock::viewRequested, this,
-          [this](int v) { setView(v == 0 ? View::Cockpit : View::Chart); });
+  connect(m_dock, &BottomDock::viewRequested, this, [this](int v) {
+    setView(v == 0 ? View::Cockpit : v == 1 ? View::Chart : View::Boat);
+  });
   connect(m_cockpit, &CockpitView::sailConfigRequested, this,
           [this] { m_drawer->open(m_sailSection); });
   connect(m_cockpit, &CockpitView::routesRequested, this,
@@ -134,7 +137,8 @@ MainWindow::~MainWindow() = default;
 void MainWindow::setView(View v) {
   m_view = v;
   m_cockpit->setVisible(v == View::Cockpit);
-  m_dock->setActiveView(v == View::Cockpit ? 0 : 1);
+  m_boat->setVisible(v == View::Boat);
+  m_dock->setActiveView(v == View::Cockpit ? 0 : v == View::Chart ? 1 : 2);
   layoutOverlays();
 }
 
@@ -202,6 +206,8 @@ void MainWindow::layoutOverlays(bool animate) {
   m_chart->setInsets(left, 0);
   m_cockpit->setGeometry(0, 0, w, mapH);
   m_cockpit->setLeftInset(left);
+  m_boat->setGeometry(0, 0, w, mapH);
+  m_boat->setLeftInset(left);
 
   m_instruments->resize(m_instruments->sizeHint());
   const QPoint instPos(left + kGap - kShadow, kGap - kShadow);
@@ -283,6 +289,8 @@ void MainWindow::layoutOverlays(bool animate) {
   if (m_view == View::Cockpit) m_cockpit->raise();
   for (const auto& o : m_overlays)
     if (!o.first->property("chartOnly").toBool()) o.first->raise();
+  // The boat view uses the whole screen for its cards.
+  if (m_view == View::Boat) m_boat->raise();
   m_drawer->raise();
   m_routeBar->raise();
   m_areaBar->raise();
@@ -437,6 +445,9 @@ void MainWindow::keyPressEvent(QKeyEvent* e) {
       break;
     case Qt::Key_C:
       setView(m_view == View::Cockpit ? View::Chart : View::Cockpit);
+      break;
+    case Qt::Key_B:
+      setView(m_view == View::Boat ? View::Chart : View::Boat);
       break;
     case Qt::Key_F11:
       setWindowState(windowState() ^ Qt::WindowFullScreen);

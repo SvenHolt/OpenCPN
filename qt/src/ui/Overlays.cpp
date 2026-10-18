@@ -274,9 +274,9 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   connect(mob, &QAbstractButton::clicked, this, &BottomDock::mobRequested);
   l->addWidget(mob);
   l->addSpacing(10);
-  const char* viewIcons[2] = {"gauge", "chart"};
-  const QString viewNames[2] = {tr("Cockpit"), tr("Chart")};
-  for (int i = 0; i < 2; ++i) {
+  const char* viewIcons[3] = {"gauge", "chart", "boat"};
+  const QString viewNames[3] = {tr("Cockpit"), tr("Chart"), tr("Boat")};
+  for (int i = 0; i < 3; ++i) {
     m_views[i] = new DockButton(viewIcons[i], viewNames[i], this);
     m_views[i]->setCheckable(true);
     m_views[i]->setMinimumWidth(72);
@@ -355,7 +355,7 @@ int BottomDock::addSection(const QString& icon, const QString& label) {
 }
 
 void BottomDock::setActiveView(int view) {
-  for (int i = 0; i < 2; ++i) m_views[i]->setChecked(i == view);
+  for (int i = 0; i < 3; ++i) m_views[i]->setChecked(i == view);
 }
 
 void BottomDock::setActiveSection(int s) {
@@ -374,7 +374,7 @@ void BottomDock::resizeEvent(QResizeEvent*) {
 void BottomDock::fitSections() {
   // Fixed parts: margins, MOB, the two view buttons, night mode, clock.
   constexpr int kButton = 64;  // section button incl. spacing
-  int fixed = 14 + 18 + 4 * 82 + 78 + 10 + 40;
+  int fixed = 14 + 18 + 5 * 82 + 78 + 10 + 40;
   if (!m_status->isHidden()) fixed += m_status->sizeHint().width() + 18;
   const int available = width() - fixed;
   const int n = int(m_buttons.size());

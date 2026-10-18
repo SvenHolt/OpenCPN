@@ -59,7 +59,7 @@ public:
   explicit BottomDock(QWidget* parent = nullptr);
   /** Adds a section button; returns its index (== drawer page index). */
   int addSection(const QString& icon, const QString& label);
-  /** 0 = cockpit, 1 = chart */
+  /** 0 = cockpit, 1 = chart, 2 = boat systems */
   void setActiveView(int view);
   void setActiveSection(int s);
   static constexpr int kHeight = 76;
@@ -81,7 +81,7 @@ private:
   QStringList m_icons, m_labels;
   DockButton* m_more;
   int m_active = -1;
-  DockButton* m_views[2];
+  DockButton* m_views[3];
   class QHBoxLayout* m_sectionLayout;
   DockButton* m_theme;
   QLabel* m_clock;

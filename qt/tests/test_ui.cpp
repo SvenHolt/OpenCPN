@@ -11,6 +11,8 @@
 #include "ui/MainWindow.h"
 #include "core/osm/OnlineOsm.h"
 #include "ui/OfflinePage.h"
+#include "core/BoatSystems.h"
+#include "ui/BoatView.h"
 #include "ui/PassagePanel.h"
 #include "ui/PolarPanel.h"
 #include "ui/RoutePlanPanel.h"
@@ -198,6 +200,34 @@ private slots:
     QCOMPARE(state.value("source").toString(), QStringLiteral("icon_seamless"));
     passage->restoreState(state);
     passage->setRoute({});
+  }
+
+  void boatView() {
+    m_win->setView(MainWindow::View::Boat);
+    auto* view = m_win->findChild<BoatView*>();
+    QVERIFY(view && view->isVisible());
+    auto* cabin = view->findChild<CabinLayout*>();
+    QVERIFY(cabin && cabin->width() > 300);
+    auto& sys = BoatSystems::instance();
+    const auto isOn = [&sys](const QString& id) {
+      for (const auto& l : sys.lights())
+        if (l.id == id) return l.on;
+      return false;
+    };
+    // Tapping a light in the layout switches it.
+    const bool before = isOn("galley_spot");
+    QTest::mouseClick(cabin, Qt::LeftButton, {},
+                      cabin->lightPos("galley_spot").toPoint());
+    QCOMPARE(isOn("galley_spot"), !before);
+    // The night sailing button applies the scene.
+    for (auto* b : view->findChildren<QPushButton*>())
+      if (b->property("scene").toString() == "night") b->click();
+    QCOMPARE(sys.activeScene(), QStringLiteral("night"));
+    QTest::qWait(200);
+    const QString shot = qEnvironmentVariable("OCPN_QT_TEST_BOAT_SHOT");
+    if (!shot.isEmpty()) m_win->grab().save(shot);
+    sys.applyScene("evening");
+    m_win->setView(MainWindow::View::Chart);
   }
 
   void polarEditorRoundTrip() {

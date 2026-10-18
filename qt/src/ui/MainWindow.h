@@ -19,6 +19,7 @@ class AreaSelectBar;
 class TargetCard;
 class SideDrawer;
 class CockpitView;
+class BoatView;
 class RoutesPage;
 
 class MainWindow : public QWidget, public PluginHost {
@@ -42,7 +43,7 @@ public:
   ChartView* chart() const { return m_chart; }
   SideDrawer* drawer() const { return m_drawer; }
   void selectAisTarget(quint32 mmsi);
-  enum class View { Cockpit, Chart };
+  enum class View { Cockpit, Chart, Boat };
   void setView(View v);
   View view() const { return m_view; }
   /** Lets the skipper frame an area for offline OSM data. */
@@ -78,5 +79,6 @@ private:
   int m_sailSection = -1;
   int m_offlineSection = -1;
   CockpitView* m_cockpit;
+  BoatView* m_boat;
   View m_view = View::Chart;
 };

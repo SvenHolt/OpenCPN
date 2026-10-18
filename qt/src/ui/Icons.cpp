@@ -81,6 +81,8 @@ const QHash<QString, QString>& bodies() {
        R"(<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>)"},
       {"edit",
        R"(<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>)"},
+      {"boat",
+       R"(<path d="M3 15h18l-3 4.5H6z"/><path d="M12 3v11"/><path d="M12 4.5l6.5 8.5H12"/><path d="M11 6.5L6 13h5"/>)"},
       {"more",
        R"(<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>)"},
       {"download",

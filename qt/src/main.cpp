@@ -126,7 +126,8 @@ int main(int argc, char** argv) {
   QCommandLineOption charts("charts", "Add a chart directory or file.", "path");
   QCommandLineOption center(
       "center", "Center the chart: lat,lon[,display scale].", "lat,lon,scale");
-  QCommandLineOption view("view", "Start view: cockpit or chart.", "view");
+  QCommandLineOption view("view", "Start view: cockpit, chart or boat.",
+                          "view");
   QCommandLineOption grib("grib", "Open a GRIB file.", "file");
   QCommandLineOption fresh("fresh",
                            "Ignore stored settings and data (testing).");
@@ -168,8 +169,9 @@ int main(int argc, char** argv) {
   MainWindow win(land);
   PluginManager::instance().loadAll(&win);
   if (cli.isSet(view))
-    win.setView(cli.value(view) == "chart" ? MainWindow::View::Chart
-                                           : MainWindow::View::Cockpit);
+    win.setView(cli.value(view) == "chart"  ? MainWindow::View::Chart
+                : cli.value(view) == "boat" ? MainWindow::View::Boat
+                                            : MainWindow::View::Cockpit);
   if (cli.isSet(grib)) {
     QString err;
     if (!GribManager::instance().open(cli.value(grib), &err))
@@ -202,7 +204,7 @@ int main(int argc, char** argv) {
       QTimer::singleShot(1500, &win, [&win, &cli, &view] {
         const auto box = createDemoRoute();
         win.chart()->fitGeoBounds(box[0], box[1], box[2], box[3]);
-        if (cli.value(view) != "chart") win.setView(MainWindow::View::Cockpit);
+        if (!cli.isSet(view)) win.setView(MainWindow::View::Cockpit);
       });
     if (cli.isSet(page))
       QTimer::singleShot(1800, &win, [&win, &cli, &page] {

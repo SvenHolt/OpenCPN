@@ -28,6 +28,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
 | **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
+| **Bordsysteme · Nachtfahrt** | |
+| ![Boot](doc/screenshot-boat.png) | |
 | **Wettermodelle × Abfahrtszeit** | **Polardaten** |
 | ![Modelle](doc/screenshot-models.png) | ![Polare](doc/screenshot-polar.png) |
 | **Kartenausschnitt für Offline-Daten wählen** | **Offline-Gebiete · lokale Overpass-Instanz** |
@@ -59,6 +61,7 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
 | **Polardaten**: Import (.pol/.csv/Expedition), Tabelleneditor, Diagramm, optimale Kreuz-/Vorwindwinkel | ✅ |
 | **Wettermodelle vergleichen** (ICON, GFS, ECMWF, Météo-France, GRIB, manuell) × Abfahrtszeiten | ✅ |
+| **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
 | **Reisen offline speichern** (Route, Planung, Modelle, GRIB, Häfen und Küste entlang der Route) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
 | GPX-Import/-Export (auch OpenCPN `navobj.xml`) | ✅ |
@@ -167,6 +170,47 @@ berechnet.
 * **„Windvorhersage laden“** holt NOAA GFS 0,25° (Wind 10 m, Böen,
   Bodendruck, 0–72 h in 3-Stunden-Schritten) direkt von NOMADS für den
   sichtbaren Kartenausschnitt.
+
+### Bordsysteme (Ansicht „Boot“)
+
+Dritte Ansicht im Dock neben Cockpit und Karte (Taste `B`):
+
+* **Kabinen-Layout** einer 28-Fuß-Yacht im Stil der Dufour 2800, von oben:
+  * Bugkabine mit V-Koje, Salon mit Sitzbänken, Tisch und Kartentisch,
+    Pantry, Bad, Hundekoje (Achterkabine) und Cockpit.
+  * Jeder Raum ist nach seiner Temperatur eingefärbt (blau kalt, orange
+    warm). Außentemperatur im Cockpit.
+  * Leuchten erscheinen in ihrer Farbe und Helligkeit. Ein Tipp auf eine
+    Leuchte schaltet sie, ebenso die Positionslaternen (rot/grün/weiß),
+    Dampferlicht, Ankerlicht und Decksstrahler.
+  * Frischwasser-, Fäkalien- und Dieseltank mit Füllstand; Batteriebank
+    unter der Salonbank; Solarpaneele am Heckbügel mit aktueller Leistung;
+    Landstromanschluss am Heck.
+  * Webasto mit den Warmluftleitungen in die Räume (orange beim Heizen).
+* **Lichtszenen:** Nachtfahrt (rot, stark gedimmt, nur Salon, Kartentisch,
+  Fußbodenlicht, Pantry, Bad), Abend (warmweiß 50 %), Hell, Vor Anker
+  (Ankerlicht an, Positionslaternen aus, Salon indirekt) und Alles aus.
+  Positionslaternen schalten die Szenen nicht mit. Das Modell kennt je LED
+  Helligkeit und Farbe; die Bedienung pro LED folgt mit der digitalen
+  Schaltung.
+* **Energie (Victron):** Ladezustand, Spannung, Strom und Restlaufzeit der
+  Batteriebank (SmartShunt), Solar (MPPT-Zustand, Tagesertrag), Landstrom
+  mit Ladegerät (MultiPlus), Verbraucher gesamt.
+* **Heizung (Webasto Air Top):**
+  * Ein/Aus und Solltemperatur.
+  * Zustände: Start, Heizen, Lüften, Nachlauf, Störung.
+  * Werte: Leistung, Ausblastemperatur, Dieselverbrauch, Spannung,
+    Betriebsstunden.
+* **Tanks** und **Verbraucher** (Kühlschrank, Wasserpumpe, Instrumente,
+  Plotter, UKW, Autopilot, Steckdosen, Stereo, Wechselrichter,
+  Bilgepumpe) mit Schaltern.
+
+Noch sind alle Werte **simuliert**: Temperaturen folgen Tagesgang und
+Heizung, die Batterie reagiert auf Verbraucher, Sonnenstand und Landstrom,
+und Tanks leeren sich. Jeder Wert und jeder Schalter trägt bereits seinen
+Signal-K-Pfad (`environment.inside.<raum>.temperature`,
+`tanks.freshWater.0.currentLevel`, `electrical.switches.<id>.state` …).
+Die Signal-K-Anbindung und die Elektronik folgen später.
 
 ### Routenplanung von Hafen zu Hafen
 
@@ -436,7 +480,7 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--charts <ordner>` | fügt einen Kartenordner hinzu |
 | `--grib <datei>` | öffnet eine GRIB-Datei |
 | `--center lat,lon[,maßstab]` | zentriert die Karte, z. B. `40.84,-73.93,15000` |
-| `--view cockpit\|chart` | Startansicht |
+| `--view cockpit\|chart\|boat` | Startansicht |
 | `--day` | startet im Tagmodus |
 | `--page N` | öffnet das Seitenpanel N (0 Karten, 1 Routen …) |
 | `--import-osm datei.osm` | importiert eine OSM-XML-Datei als Offline-Gebiet |
@@ -501,6 +545,7 @@ qt/
 │   ├── Polar              Polardaten (Formate, Interpolation, VMG)
 │   ├── WeatherModels      Modellvorhersagen entlang der Route (Open-Meteo)
 │   ├── Voyage             gespeicherte Reisen und Offline-Vorbereitung
+│   ├── BoatSystems        Bordsysteme (Räume, Tanks, Victron, Webasto, Licht)
 │   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge,
 │   │                      OnlineOsm (öffentliche Server, Kachel-Cache, Nominatim)
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
@@ -515,6 +560,7 @@ qt/
 │   ├── PassagePanel       Törnplanung, Modell-Matrix, Etappen
 │   ├── PolarPanel         Polardiagramm, Import, Tabelleneditor
 │   ├── VoyageList         Reisen (offline)
+│   ├── BoatView           Ansicht „Boot“: Kabinen-Layout und Systemkarten
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)
