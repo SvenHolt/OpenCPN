@@ -122,7 +122,11 @@ int main(int argc, char** argv) {
                            "4000");
   QCommandLineOption demo("demo", "Create and activate a demo route.");
   QCommandLineOption day("day", "Start with the day theme.");
-  QCommandLineOption page("page", "Open a drawer page (0-4).", "index");
+  QCommandLineOption page(
+      "page",
+      "Open a drawer page: settings, routes, general, charts, data, offline, "
+      "sails, scenes, automations or its number.",
+      "page");
   QCommandLineOption charts("charts", "Add a chart directory or file.", "path");
   QCommandLineOption center(
       "center", "Center the chart: lat,lon[,display scale].", "lat,lon,scale");
@@ -208,7 +212,8 @@ int main(int argc, char** argv) {
       });
     if (cli.isSet(page))
       QTimer::singleShot(1800, &win, [&win, &cli, &page] {
-        win.drawer()->open(cli.value(page).toInt());
+        if (const int p = win.pageIndex(cli.value(page)); p >= 0)
+          win.drawer()->open(p);
       });
     QTimer::singleShot(cli.value(delay).toInt(), &win, [&win, &cli, &shot] {
       win.grab().save(cli.value(shot));
@@ -220,7 +225,8 @@ int main(int argc, char** argv) {
       QTimer::singleShot(1500, &win, [] { createDemoRoute(); });
     if (cli.isSet(page))
       QTimer::singleShot(300, &win, [&win, &cli, &page] {
-        win.drawer()->open(cli.value(page).toInt());
+        if (const int p = win.pageIndex(cli.value(page)); p >= 0)
+          win.drawer()->open(p);
       });
   }
   const int rc = app.exec();

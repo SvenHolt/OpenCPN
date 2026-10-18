@@ -10,6 +10,8 @@
 
 #include <QColor>
 #include <QDateTime>
+#include <QHash>
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -91,11 +93,47 @@ struct Heater {
   double stateSecs = 0;  // time in the current state
   int faultCode = 0;
   QString zone = "saloon";  // room sensor
+  /** Own targets of further rooms (duct flaps close when a room reached
+   *  its target). Rooms without an entry simply get their share of air. */
+  QHash<QString, double> zoneSetpointC;
   static QString stateName(State s);
+  /** Target of a room: setpointC for the sensor room, NaN if none. */
+  double setpointFor(const QString& zone) const;
+  bool running() const {
+    return state == State::Starting || state == State::Heating ||
+           state == State::Ventilation;
+  }
 };
 
+/** Hot water boiler: 230 V element, fed from shore power or, without shore
+ *  power, through the inverter from the battery bank. */
+struct WaterHeater {
+  bool on = false;
+  bool heating = false;  // element currently on (thermostat)
+  double tempC = 16;
+  double targetC = 60;
+  double capacityL = 22;
+  double powerW = 500;
+  QString signalKPath = "electrical.switches.water_heater.state";
+};
+
+/** State of one light within a scene. */
+struct SceneLight {
+  QString lightId;
+  bool on = false;
+  double brightness = 1.0;  // 0..1
+  QColor color = QColor(255, 236, 200);
+};
+
+/** A light scene: brightness and color of the LEDs it contains. Lights not
+ *  listed keep their state when the scene is applied. */
 struct LightScene {
   QString id, name, icon;
+  bool builtIn = false;
+  QVector<SceneLight> lights;
+  const SceneLight* find(const QString& lightId) const;
+  QJsonObject toJson() const;
+  static LightScene fromJson(const QJsonObject& o);
 };
 
 class BoatSystems : public QObject {
@@ -109,6 +147,7 @@ public:
   const QVector<BoatConsumer>& consumers() const { return m_consumers; }
   const EnergySystem& energy() const { return m_energy; }
   const Heater& heater() const { return m_heater; }
+  const WaterHeater& waterHeater() const { return m_water; }
   const BoatZone* zone(const QString& id) const;
   double outsideC() const;
 
@@ -121,12 +160,25 @@ public:
   void setConsumer(const QString& id, bool on);
   void setHeaterOn(bool on);
   void setHeaterSetpoint(double c);
+  /** Target of a room; the heater's sensor room sets setpointC, NaN removes
+   *  the room's own target. */
+  void setZoneSetpoint(const QString& zone, double c);
+  void setWaterHeaterOn(bool on);
   void setShoreConnected(bool on);  // simulator only
 
   // --- Light scenes --------------------------------------------------------
-  static QVector<LightScene> scenes();
-  /** Sets brightness and color of every cabin light; navigation lights are
-   *  left alone. */
+  /** Built-in and own scenes (stored in AppData/light-scenes.json). */
+  const QVector<LightScene>& scenes() const { return m_scenes; }
+  const LightScene* scene(const QString& id) const;
+  /** The factory scenes (night, evening, bright, anchor, shower, off). */
+  QVector<LightScene> defaultScenes() const;
+  /** Adds or replaces a scene (by id) and stores the list. */
+  void saveScene(const LightScene& scene);
+  /** Removes an own scene; a built-in one is reset to its default. */
+  void removeScene(const QString& id);
+  /** A scene with the current state of every cabin light. */
+  LightScene captureScene(const QString& name) const;
+  /** Sets the lights contained in the scene. */
   void applyScene(const QString& id);
   QString activeScene() const { return m_scene; }
 
@@ -135,11 +187,15 @@ public:
 
 signals:
   void changed();
+  void scenesChanged();
 
 private:
   BoatSystems();
   void setup();
   BoatLight* light(const QString& id);
+  void loadScenes();
+  void storeScenes() const;
+  static QString scenesFile();
 
   QVector<BoatZone> m_zones;
   QVector<BoatTank> m_tanks;
@@ -147,6 +203,8 @@ private:
   QVector<BoatConsumer> m_consumers;
   EnergySystem m_energy;
   Heater m_heater;
+  WaterHeater m_water;
+  QVector<LightScene> m_scenes;
   QString m_scene = "off";
   QTimer m_timer;
   QDateTime m_lastStep;

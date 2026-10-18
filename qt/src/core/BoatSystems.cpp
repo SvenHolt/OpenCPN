@@ -1,7 +1,16 @@
 #include "core/BoatSystems.h"
 
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QRandomGenerator>
+#include <QSaveFile>
+#include <QSet>
+#include <QStandardPaths>
+#include <QUuid>
 #include <algorithm>
 
 #include "core/BoatConfig.h"
@@ -41,6 +50,11 @@ QString Heater::stateName(State s) {
     default:
       return tr("Off");
   }
+}
+
+double Heater::setpointFor(const QString& z) const {
+  if (z == zone) return setpointC;
+  return zoneSetpointC.value(z, std::numeric_limits<double>::quiet_NaN());
 }
 
 BoatSystems& BoatSystems::instance() {
@@ -143,6 +157,7 @@ void BoatSystems::setup() {
   addConsumer("inverter", tr("230 V inverter"), "aft", 25, false);
   addConsumer("bilge", tr("Bilge pump (auto)"), "saloon", 0, true, false);
 
+  loadScenes();
   // Lights: evening on the start.
   applyScene("evening");
   m_energy.soc = 0.82;
@@ -217,61 +232,250 @@ void BoatSystems::setHeaterSetpoint(double c) {
   emit changed();
 }
 
+void BoatSystems::setZoneSetpoint(const QString& z, double c) {
+  if (z == m_heater.zone) {
+    if (!std::isnan(c)) setHeaterSetpoint(c);
+    return;
+  }
+  if (std::isnan(c))
+    m_heater.zoneSetpointC.remove(z);
+  else
+    m_heater.zoneSetpointC.insert(z, std::clamp(c, 8.0, 30.0));
+  emit changed();
+}
+
+void BoatSystems::setWaterHeaterOn(bool on) {
+  m_water.on = on;
+  m_water.heating = on && m_water.tempC < m_water.targetC - 1;
+  emit changed();
+}
+
 void BoatSystems::setShoreConnected(bool on) {
   m_energy.shoreConnected = on;
   emit changed();
 }
 
-QVector<LightScene> BoatSystems::scenes() {
-  return {{"night", tr("Night sailing"), "moon"},
-          {"evening", tr("Evening"), "sun"},
-          {"bright", tr("Bright"), "sun"},
-          {"anchor", tr("At anchor"), "anchor"},
-          {"off", tr("All off"), "close"}};
+// --------------------------------------------------------------------------
+// Light scenes
+
+const SceneLight* LightScene::find(const QString& lightId) const {
+  for (const auto& l : lights)
+    if (l.lightId == lightId) return &l;
+  return nullptr;
+}
+
+QJsonObject LightScene::toJson() const {
+  QJsonArray arr;
+  for (const auto& l : lights)
+    arr.append(QJsonObject{{"light", l.lightId},
+                           {"on", l.on},
+                           {"brightness", l.brightness},
+                           {"color", l.color.name()}});
+  return {{"id", id},
+          {"name", name},
+          {"icon", icon},
+          {"builtIn", builtIn},
+          {"lights", arr}};
+}
+
+LightScene LightScene::fromJson(const QJsonObject& o) {
+  LightScene s;
+  s.id = o["id"].toString();
+  s.name = o["name"].toString();
+  s.icon = o["icon"].toString("bulb");
+  s.builtIn = o["builtIn"].toBool();
+  for (const auto& v : o["lights"].toArray()) {
+    const QJsonObject lo = v.toObject();
+    SceneLight l;
+    l.lightId = lo["light"].toString();
+    l.on = lo["on"].toBool();
+    l.brightness = std::clamp(lo["brightness"].toDouble(1), 0.0, 1.0);
+    l.color = QColor(lo["color"].toString());
+    if (!l.color.isValid()) l.color = QColor(255, 236, 200);
+    if (!l.lightId.isEmpty()) s.lights << l;
+  }
+  return s;
+}
+
+QVector<LightScene> BoatSystems::defaultScenes() const {
+  const QColor red(255, 28, 0), warm(255, 176, 110), white(255, 240, 222),
+      neutral(255, 248, 238);
+  const auto make = [this](const QString& id, const QString& name,
+                           const QString& icon, auto setting) {
+    LightScene s;
+    s.id = id;
+    s.name = name;
+    s.icon = icon;
+    s.builtIn = true;
+    for (const BoatLight& l : m_lights) {
+      SceneLight sl;
+      sl.lightId = l.id;
+      if (setting(l, sl)) s.lights << sl;
+    }
+    return s;
+  };
+  QVector<LightScene> out;
+  // Red and dim so the eyes stay adapted to the dark; only where the crew
+  // moves at night.
+  out << make("night", tr("Night sailing"), "moon",
+              [&](const BoatLight& l, SceneLight& sl) {
+                if (l.navigation) return false;
+                sl.on = l.id == "saloon_ceiling" || l.id == "chart_table" ||
+                        l.id == "courtesy" || l.id == "galley_spot" ||
+                        l.id == "heads_ceiling";
+                sl.brightness = l.id == "chart_table" ? 0.12 : 0.08;
+                sl.color = red;
+                return true;
+              });
+  out << make("evening", tr("Evening"), "sun",
+              [&](const BoatLight& l, SceneLight& sl) {
+                if (l.navigation) return false;
+                sl.on = (l.zone == "saloon" || l.zone == "galley" ||
+                         l.id == "heads_ceiling") &&
+                        l.id != "chart_table";
+                sl.brightness = 0.5;
+                sl.color = warm;
+                return true;
+              });
+  out << make("bright", tr("Bright"), "sun",
+              [&](const BoatLight& l, SceneLight& sl) {
+                if (l.navigation) return false;
+                sl.on = true;
+                sl.brightness = 1.0;
+                sl.color = white;
+                return true;
+              });
+  // At anchor: the anchor light, not the running lights.
+  out << make("anchor", tr("At anchor"), "anchor",
+              [&](const BoatLight& l, SceneLight& sl) {
+                if (l.navigation) {
+                  if (l.id == "deck_light") return false;
+                  sl.on = l.id == "anchor_light";
+                  sl.color = white;
+                  return true;
+                }
+                sl.on = l.id == "saloon_indirect" || l.id == "courtesy";
+                sl.brightness = 0.25;
+                sl.color = warm;
+                return true;
+              });
+  // Showering: bright neutral light in the heads, a soft path through the
+  // saloon.
+  out << make("shower", tr("Shower"), "drop",
+              [&](const BoatLight& l, SceneLight& sl) {
+                if (l.navigation) return false;
+                sl.on = l.id == "heads_ceiling" || l.id == "saloon_indirect" ||
+                        l.id == "courtesy";
+                sl.brightness = l.id == "heads_ceiling" ? 1.0 : 0.3;
+                sl.color = l.id == "heads_ceiling" ? neutral : warm;
+                return true;
+              });
+  out << make("off", tr("All off"), "close",
+              [&](const BoatLight& l, SceneLight& sl) {
+                if (l.navigation) return false;
+                sl.on = false;
+                sl.brightness = l.brightness;
+                sl.color = l.color;
+                return true;
+              });
+  return out;
+}
+
+QString BoatSystems::scenesFile() {
+  return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
+         "/light-scenes.json";
+}
+
+void BoatSystems::loadScenes() {
+  m_scenes = defaultScenes();
+  QFile f(scenesFile());
+  if (!f.open(QIODevice::ReadOnly)) return;
+  const QJsonArray arr = QJsonDocument::fromJson(f.readAll()).array();
+  for (const auto& v : arr) {
+    LightScene s = LightScene::fromJson(v.toObject());
+    if (s.id.isEmpty()) continue;
+    auto it = std::find_if(m_scenes.begin(), m_scenes.end(),
+                           [&](const LightScene& x) { return x.id == s.id; });
+    if (it != m_scenes.end()) {
+      s.builtIn = it->builtIn;
+      *it = s;
+    } else {
+      s.builtIn = false;
+      m_scenes << s;
+    }
+  }
+}
+
+void BoatSystems::storeScenes() const {
+  QJsonArray arr;
+  for (const auto& s : m_scenes) arr.append(s.toJson());
+  const QString path = scenesFile();
+  QDir().mkpath(QFileInfo(path).absolutePath());
+  QSaveFile f(path);
+  if (!f.open(QIODevice::WriteOnly)) return;
+  f.write(QJsonDocument(arr).toJson());
+  f.commit();
+}
+
+const LightScene* BoatSystems::scene(const QString& id) const {
+  for (const auto& s : m_scenes)
+    if (s.id == id) return &s;
+  return nullptr;
+}
+
+void BoatSystems::saveScene(const LightScene& scene) {
+  LightScene s = scene;
+  if (s.id.isEmpty())
+    s.id = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
+  auto it = std::find_if(m_scenes.begin(), m_scenes.end(),
+                         [&](const LightScene& x) { return x.id == s.id; });
+  if (it != m_scenes.end()) {
+    s.builtIn = it->builtIn;
+    *it = s;
+  } else {
+    s.builtIn = false;
+    m_scenes << s;
+  }
+  storeScenes();
+  emit scenesChanged();
+}
+
+void BoatSystems::removeScene(const QString& id) {
+  for (int i = 0; i < m_scenes.size(); ++i) {
+    if (m_scenes[i].id != id) continue;
+    if (m_scenes[i].builtIn) {
+      for (const auto& d : defaultScenes())
+        if (d.id == id) m_scenes[i] = d;
+    } else {
+      m_scenes.removeAt(i);
+    }
+    if (m_scene == id) m_scene.clear();
+    storeScenes();
+    emit scenesChanged();
+    return;
+  }
+}
+
+LightScene BoatSystems::captureScene(const QString& name) const {
+  LightScene s;
+  s.name = name;
+  s.icon = "bulb";
+  for (const BoatLight& l : m_lights) {
+    if (l.navigation) continue;
+    s.lights << SceneLight{l.id, l.on, l.brightness, l.color};
+  }
+  return s;
 }
 
 void BoatSystems::applyScene(const QString& id) {
-  // Per light: on, brightness, color.
-  struct Setting {
-    bool on;
-    double level;
-    QColor color;
-  };
-  const QColor red(255, 28, 0), warm(255, 176, 110), white(255, 240, 222);
-  const auto setting = [&](const BoatLight& l) -> Setting {
-    if (id == "night") {
-      // Red and dim so the eyes stay adapted to the dark; only where the
-      // crew moves at night.
-      const bool used = l.id == "saloon_ceiling" || l.id == "chart_table" ||
-                        l.id == "courtesy" || l.id == "galley_spot" ||
-                        l.id == "heads_ceiling";
-      return {used, l.id == "chart_table" ? 0.12 : 0.08, red};
-    }
-    if (id == "evening") {
-      const bool used =
-          l.zone == "saloon" || l.zone == "galley" || l.id == "heads_ceiling";
-      return {used && l.id != "chart_table", 0.5, warm};
-    }
-    if (id == "bright") return {true, 1.0, white};
-    if (id == "anchor") {
-      const bool used = l.id == "saloon_indirect" || l.id == "courtesy";
-      return {used, 0.25, warm};
-    }
-    return {false, l.brightness, l.color};
-  };
-  for (BoatLight& l : m_lights) {
-    if (l.navigation) continue;
-    const Setting s = setting(l);
-    l.on = s.on;
-    l.brightness = s.level;
-    l.color = s.color;
-  }
-  // At anchor: the anchor light, not the running lights.
-  if (id == "anchor") {
-    for (BoatLight& l : m_lights) {
-      if (l.id == "anchor_light") l.on = true;
-      if (l.id == "nav_lights" || l.id == "steaming") l.on = false;
-    }
+  const LightScene* s = scene(id);
+  if (!s) return;
+  for (const SceneLight& sl : s->lights) {
+    BoatLight* l = light(sl.lightId);
+    if (!l) continue;
+    l->on = sl.on;
+    l->brightness = sl.brightness;
+    l->color = sl.color;
   }
   m_scene = id;
   emit changed();
@@ -298,11 +502,19 @@ void BoatSystems::simulate(double secs) {
       (outTarget - outside->temperatureC) * std::min(1.0, secs / 1800) +
       noise(0.01);
 
-  // Heater state machine (Webasto Air Top).
+  // Heater state machine (Webasto Air Top). It regulates on the room with
+  // the largest deficit; rooms with an own target close their duct flap
+  // once they are warm enough.
   Heater& h = m_heater;
   h.stateSecs += secs;
   const BoatZone* room = zone(h.zone);
   const double roomC = room ? room->temperatureC : 18;
+  double deficit = -1e9;  // target - temperature, largest over all rooms
+  for (const auto& z : m_zones) {
+    const double target = h.setpointFor(z.id);
+    if (!std::isnan(target))
+      deficit = std::max(deficit, target - z.temperatureC);
+  }
   switch (h.state) {
     case Heater::State::Starting:
       h.outputPct = 20;
@@ -311,18 +523,16 @@ void BoatSystems::simulate(double secs) {
         h.stateSecs = 0;
       }
       break;
-    case Heater::State::Heating: {
-      const double diff = h.setpointC - roomC;
-      h.outputPct = std::clamp(30 + 35 * diff, 15.0, 100.0);
-      if (roomC > h.setpointC + 1.0) {
+    case Heater::State::Heating:
+      h.outputPct = std::clamp(50 + 60 * deficit, 15.0, 100.0);
+      if (deficit < -0.5) {
         h.state = Heater::State::Ventilation;
         h.stateSecs = 0;
       }
       break;
-    }
     case Heater::State::Ventilation:
       h.outputPct = 0;
-      if (roomC < h.setpointC - 0.5) {
+      if (deficit > 0.3) {
         h.state = Heater::State::Starting;
         h.stateSecs = 0;
       }
@@ -355,17 +565,55 @@ void BoatSystems::simulate(double secs) {
       h.state == Heater::State::CoolDown)
     heaterElW = 10;
 
+  // Duct flaps: a room only gets a trickle of air once it is warm (its own
+  // target, else the one of the sensor room); the air then goes to the
+  // rooms that are still cold.
+  QHash<QString, double> share;
+  double shareSum = 0, openSum = 0, trickleSum = 0;
+  QSet<QString> closed;
+  for (const auto& z : m_zones) {
+    const double sh = heaterShare(z.id);
+    if (sh <= 0) continue;
+    double target = h.setpointFor(z.id);
+    if (std::isnan(target)) target = h.setpointC;
+    shareSum += sh;
+    if (z.temperatureC > target + 0.2) {
+      closed.insert(z.id);
+      trickleSum += sh * 0.05;
+    } else {
+      openSum += sh;
+    }
+  }
+  for (const auto& z : m_zones) {
+    const double sh = heaterShare(z.id);
+    share.insert(z.id, closed.contains(z.id) || openSum <= 0
+                           ? sh * 0.05
+                           : sh * (shareSum - trickleSum) / openSum);
+  }
+
   // Rooms: heat loss to the outside, heater air through the ducts, people
   // and the galley add a little.
   for (auto& z : m_zones) {
     if (z.id == "outside") continue;
     const double loss = (outside->temperatureC - z.temperatureC) / 3600 * 0.35;
-    const double gain = heatW * heaterShare(z.id) / 2000 / 3600 * 9;
+    const double gain = heatW * share.value(z.id) / 2000 / 3600 * 20;
     z.temperatureC += (loss + gain) * secs + noise(0.003);
     z.humidityPct = std::clamp(
         z.humidityPct + (burning ? -0.002 : 0.001) * secs + noise(0.02), 35.0,
         90.0);
   }
+
+  // Hot water boiler: thermostat with 5 K hysteresis, slow heat loss.
+  WaterHeater& w = m_water;
+  if (!w.on)
+    w.heating = false;
+  else if (w.tempC >= w.targetC)
+    w.heating = false;
+  else if (w.tempC < w.targetC - 5)
+    w.heating = true;
+  const double waterLossW = (w.tempC - roomC) * 1.2;
+  w.tempC +=
+      ((w.heating ? w.powerW : 0) - waterLossW) * secs / (4186.0 * w.capacityL);
 
   // Tanks: water use while the pump is on, the holding tank fills slowly.
   for (auto& c : m_consumers)
@@ -383,6 +631,9 @@ void BoatSystems::simulate(double secs) {
   // Energy (Victron): loads, solar, shore power, battery.
   EnergySystem& e = m_energy;
   double loads = heaterElW;
+  // Without shore power the boiler runs through the inverter.
+  const double boilerW = w.heating ? w.powerW : 0;
+  if (!e.shoreConnected) loads += boilerW / 0.9;
   for (const auto& l : m_lights) loads += l.powerW();
   for (const auto& c : m_consumers)
     if (c.on) loads += c.powerW;
@@ -412,7 +663,7 @@ void BoatSystems::simulate(double secs) {
     e.chargerState = e.soc > 0.98  ? "Float"
                      : e.soc > 0.9 ? "Absorption"
                                    : "Bulk";
-    e.shoreW = e.chargerW / 0.92;
+    e.shoreW = e.chargerW / 0.92 + boilerW;
     e.shoreA = e.shoreW / e.shoreV;
   } else {
     e.shoreV = e.shoreA = e.shoreW = e.chargerW = 0;

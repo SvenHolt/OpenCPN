@@ -15,11 +15,16 @@ Zum Ausprobieren
 * Start im "Cockpit": animiertes Boot in der Kompassrose mit Kurs, Fahrt,
   Wind und nächstem Wegpunkt. Unten links im Dock zwischen "Cockpit" und
   "Karte" umschalten (Taste C).
-* Oben auf die Segelanzeige tippen (oder Dock "Segel"): Groß/Reffs,
+* Hauptmenü im Dock: Einstellungen, Routen, Markierungen, Tracks, AIS,
+  Gezeiten, Wetter. Unter "Einstellungen" liegen Allgemein, Karten,
+  Datenverbindungen, Offline-Daten, Segel & Polare, Lichtszenen und
+  Automationen (Pfeil oben links führt zurück).
+* Oben auf die Segelanzeige tippen (oder Einstellungen -> "Segel &
+  Polare"): Groß/Reffs,
   Genua-Rollung, Spinnaker usw. einstellen. Bei "Motor" oder
   "Motorsegeln" erscheint die Motoranzeige (Drehzahl, Temperatur,
   Öldruck, Tank und Reichweite); der Simulator fährt entsprechend.
-* Unten im Dock "Karten" -> "Kartenordner hinzufügen": Ordner mit S-57-ENC
+* Einstellungen -> "Karten" -> "Kartenordner hinzufügen": Ordner mit S-57-ENC
   (*.000) oder BSB-Rasterkarten (*.kap). Kostenlose ENCs: charts.noaa.gov
 * "Wetter" -> "Windvorhersage laden" (NOAA GFS, braucht Internet), oder
   "GRIB-Datei öffnen": samples\gfs_simple.grb2
@@ -33,16 +38,22 @@ Zum Ausprobieren
   (ICON, GFS, ECMWF, Météo-France) über die Abfahrtszeiten. "Reise für
   offline speichern" sichert Route, Vorhersagen und Häfen entlang der
   Strecke für unterwegs ohne Internet.
-* "Segel" -> Polare: Polardatei importieren (.pol/.csv/Expedition) oder
+* Einstellungen -> "Segel & Polare": Polardatei importieren (.pol/.csv/Expedition) oder
   in der Tabelle bearbeiten. Mit Internet werden Häfen beim Verschieben
   der Karte und bei der Suche automatisch online nachgeladen.
-* "Offline" -> "Bereich auf Karte wählen": Rahmen an Ecken/Kanten ziehen,
+* Einstellungen -> "Offline-Daten" -> "Bereich auf Karte wählen": Rahmen an Ecken/Kanten ziehen,
   Namen eingeben, "Laden". Häfen, Marinas, Tankstellen und Seezeichen aus
   OpenStreetMap erscheinen dann auf der Karte, die Offline-Suche findet
   sie. Für Abfragen ohne Internet braucht Windows eine Overpass-Instanz
   in Docker: overpass\docker-compose.yml (Anleitung in der Datei), dann
   unter "Overpass-Einstellungen" das Backend "HTTP" wählen.
-* "Daten": NMEA über UDP (Port 10110), TCP oder seriell (COM-Port)
+* "Boot" (Taste B): Kabinen-Layout mit Temperaturen, Tanks, Victron,
+  Webasto und Warmwasser (simuliert). Lichtszenen per Knopf, eigene Szenen
+  unter Einstellungen -> "Lichtszenen" (je LED an/aus, Helligkeit, Farbe).
+  Einstellungen -> "Automationen", z. B. "Winter-Duschen": Heizung an,
+  Salon 21 °C, Bad 23 °C, Warmwasser an, Licht "Duschen" - per Tipp oder
+  zu einer Uhrzeit (Wochentage, Monate).
+* Einstellungen -> "Datenverbindungen": NMEA über UDP (Port 10110), TCP oder seriell (COM-Port)
 * "Media": Spotify über die Spotify-Web-API (Client-ID nötig, siehe
   Anleitung auf der Seite). Die automatische Erkennung von Spotify-Desktop
   und YouTube Music (MPRIS) gibt es nur unter Linux.

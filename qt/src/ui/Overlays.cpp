@@ -301,7 +301,7 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
       QAction* a = menu.addAction(Icons::icon(m_icons[i], Theme::p().text, 18),
                                   m_labels[i]);
       connect(a, &QAction::triggered, this,
-              [this, i] { emit sectionRequested(i); });
+              [this, i] { emit sectionRequested(m_pages[i]); });
     }
     const QSize hint = menu.sizeHint();
     menu.exec(m_more->mapToGlobal(QPoint(0, -hint.height())));
@@ -339,26 +339,27 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   updateStatus();
 }
 
-int BottomDock::addSection(const QString& icon, const QString& label) {
-  const int index = int(m_buttons.size());
+void BottomDock::addSection(const QString& icon, const QString& label,
+                            int page) {
   auto* b = new DockButton(icon, label, this);
   b->setCheckable(true);
   b->setMinimumWidth(60);
   connect(b, &QAbstractButton::clicked, this,
-          [this, index] { emit sectionRequested(index); });
+          [this, page] { emit sectionRequested(page); });
   m_sectionLayout->addWidget(b);
   m_buttons << b;
   m_icons << icon;
   m_labels << label;
+  m_pages << page;
   fitSections();
-  return index;
 }
 
 void BottomDock::setActiveView(int view) {
   for (int i = 0; i < 3; ++i) m_views[i]->setChecked(i == view);
 }
 
-void BottomDock::setActiveSection(int s) {
+void BottomDock::setActiveSection(int page) {
+  const int s = int(m_pages.indexOf(page));
   m_active = s;
   for (int i = 0; i < m_buttons.size(); ++i) m_buttons[i]->setChecked(i == s);
   m_more->setChecked(s >= 0 && s < m_buttons.size() &&
@@ -382,7 +383,7 @@ void BottomDock::fitSections() {
   if (shown < n) shown = std::max(0, (available - kButton) / kButton);
   for (int i = 0; i < n; ++i) m_buttons[i]->setVisible(i < shown);
   m_more->setVisible(shown < n);
-  setActiveSection(m_active);
+  setActiveSection(m_active >= 0 ? m_pages[m_active] : -1);
 }
 
 void BottomDock::updateStatus() {

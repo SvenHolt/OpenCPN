@@ -9,8 +9,12 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 * **großer, leichter Tacho** (SOG) mit COG/HDG und Position
 * **Navigationskarte** im „Turn-by-Turn“-Stil: Richtungspfeil, Distanz,
   ETA, Restweg und XTE
-* **Dock am unteren Rand** mit den App-Bereichen und einer roten MOB-Taste
-* **Seitenpanel**, das von links hereingleitet
+* **Dock am unteren Rand** mit dem Hauptmenü (Einstellungen, Routen,
+  Markierungen, Tracks, AIS, Gezeiten, Wetter, Plugins) und einer roten
+  MOB-Taste
+* **Seitenpanel**, das von links hereingleitet; unter **Einstellungen**
+  liegen Allgemein, Karten, Datenverbindungen, Offline-Daten, Segel &
+  Polare, Lichtszenen und Automationen als Unterseiten mit Zurück-Pfeil
 * **Player-Karte** für Spotify und YouTube Music (Plugin)
 * **runde Kartenbuttons**: Zoom, North-up/Course-up und Schiff folgen
 * **Nacht-, Tag- und Automatikmodus** (Wechsel um 07:00 und 19:00 Uhr),
@@ -28,8 +32,10 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
 | **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
-| **Bordsysteme · Nachtfahrt** | |
-| ![Boot](doc/screenshot-boat.png) | |
+| **Bordsysteme · Nachtfahrt** | **Automation „Winter-Duschen“** |
+| ![Boot](doc/screenshot-boat.png) | ![Automation](doc/screenshot-automation.png) |
+| **Einstellungen (Hauptmenü)** | **Lichtszenen-Editor** |
+| ![Einstellungen](doc/screenshot-settings.png) | ![Lichtszenen](doc/screenshot-light-scenes.png) |
 | **Wettermodelle × Abfahrtszeit** | **Polardaten** |
 | ![Modelle](doc/screenshot-models.png) | ![Polare](doc/screenshot-polar.png) |
 | **Kartenausschnitt für Offline-Daten wählen** | **Offline-Gebiete · lokale Overpass-Instanz** |
@@ -61,7 +67,10 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
 | **Polardaten**: Import (.pol/.csv/Expedition), Tabelleneditor, Diagramm, optimale Kreuz-/Vorwindwinkel | ✅ |
 | **Wettermodelle vergleichen** (ICON, GFS, ECMWF, Météo-France, GRIB, manuell) × Abfahrtszeiten | ✅ |
-| **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
+| **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Warmwasser, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
+| **Lichtszenen-Editor**: je LED an/aus, Helligkeit und Farbe, Live-Vorschau | ✅ |
+| **Automationen** (z. B. Winter-Duschen): per Tipp oder Uhrzeit, Wochentage, Monate | ✅ |
+| **Hauptmenü**: Einstellungen, Routen, Markierungen, Tracks, AIS, Gezeiten, Wetter; Konfiguration und Offline unter Einstellungen | ✅ |
 | **Reisen offline speichern** (Route, Planung, Modelle, GRIB, Häfen und Küste entlang der Route) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
 | GPX-Import/-Export (auch OpenCPN `navobj.xml`) | ✅ |
@@ -101,7 +110,8 @@ in den Einstellungen lässt sich die Karte als Startansicht wählen.
   * Tankstand in Prozent und Litern
   * Reichweite aus Tankinhalt, Verbrauch und SOG
   * Betriebsstunden
-* **Segel-Seite** (Tippen auf die Segelanzeige oder Dock „Segel“):
+* **Segel-Seite** (Tippen auf die Segelanzeige oder Einstellungen →
+  „Segel & Polare“):
   * Antrieb: Segeln, Motorsegeln, Motor
   * Großsegel: geborgen, voll, 1.–3. Reff
   * Vorsegel: Genua mit Rollung in %, Fock, Sturmfock
@@ -189,18 +199,48 @@ Dritte Ansicht im Dock neben Cockpit und Karte (Taste `B`):
   * Webasto mit den Warmluftleitungen in die Räume (orange beim Heizen).
 * **Lichtszenen:** Nachtfahrt (rot, stark gedimmt, nur Salon, Kartentisch,
   Fußbodenlicht, Pantry, Bad), Abend (warmweiß 50 %), Hell, Vor Anker
-  (Ankerlicht an, Positionslaternen aus, Salon indirekt) und Alles aus.
-  Positionslaternen schalten die Szenen nicht mit. Das Modell kennt je LED
-  Helligkeit und Farbe; die Bedienung pro LED folgt mit der digitalen
-  Schaltung.
+  (Ankerlicht an, Positionslaternen aus, Salon indirekt), Duschen (Bad hell
+  neutralweiß, Salon indirekt gedimmt) und Alles aus. Die Knöpfe unter dem
+  Layout schalten sie; der Paletten-Knopf öffnet den Editor.
+* **Lichtszenen-Editor** (Einstellungen → Lichtszenen):
+  * „Neue Szene“ übernimmt die Leuchten, wie sie gerade sind.
+  * Je LED: gehört zur Szene (sonst bleibt sie, wie sie ist), an/aus,
+    Helligkeit 1–100 % und Farbe (Warmweiß, Neutralweiß, Kaltweiß,
+    Nachtrot, Bernstein, Blau, Türkis, Grün, Violett oder beliebig).
+    „Alle“ färbt alle LEDs der Szene auf einmal.
+  * Mit „Live-Vorschau“ folgen die Leuchten an Bord sofort; „Abbrechen“
+    stellt den vorherigen Zustand wieder her.
+  * Eigene Szenen lassen sich löschen, mitgelieferte zurücksetzen.
+    Gespeichert in `light-scenes.json` im Datenordner.
+* **Automationen** (Einstellungen → Automationen, Karte „Automationen“ in
+  der Bootsansicht):
+  * Eine Automation ist eine Liste von Aktionen: Heizung an/aus,
+    Raumtemperatur (Raum und °C), Warmwasser an/aus, Lichtszene, einzelne
+    Leuchte, Verbraucher.
+  * Auslöser: per Tipp oder zu einer Uhrzeit, wahlweise nur an bestimmten
+    Wochentagen und in bestimmten Monaten (Vorlagen Ganzjährig, Winter
+    Nov–Mär, Sommer). Zeitgesteuerte laufen einmal am Tag, bis zu
+    10 Minuten verspätet, und lassen sich in der Liste abschalten.
+  * Mitgeliefert: **Winter-Duschen** (Heizung an, Salon 21 °C, Bad 23 °C,
+    Warmwasser an, Lichtszene Duschen), **Warmer Morgen** (06:45 im
+    Winter, abgeschaltet), **Nachtfahrt** (Szene Nachtfahrt,
+    Positionslaternen, Instrumente, Autopilot) und **Boot verlassen**
+    (Heizung, Warmwasser, Licht, Stereo, Wechselrichter, Wasserpumpe aus).
+  * Gespeichert in `automations.json` im Datenordner.
 * **Energie (Victron):** Ladezustand, Spannung, Strom und Restlaufzeit der
   Batteriebank (SmartShunt), Solar (MPPT-Zustand, Tagesertrag), Landstrom
   mit Ladegerät (MultiPlus), Verbraucher gesamt.
 * **Heizung (Webasto Air Top):**
-  * Ein/Aus und Solltemperatur.
+  * Ein/Aus und Solltemperatur (Fühler im Salon).
+  * Weitere Räume können eine eigene Solltemperatur bekommen (z. B. Bad
+    23 °C). Klappen in den Warmluftleitungen schließen, sobald ein Raum
+    warm genug ist (Räume ohne eigene Vorgabe folgen dem Salon); die Luft
+    geht dann in die Räume, die noch kalt sind.
   * Zustände: Start, Heizen, Lüften, Nachlauf, Störung.
   * Werte: Leistung, Ausblastemperatur, Dieselverbrauch, Spannung,
     Betriebsstunden.
+* **Warmwasser-Boiler** (22 l, 500 W): Thermostat 60 °C, heizt über
+  Landstrom oder ohne Landstrom über den Wechselrichter aus der Batterie.
 * **Tanks** und **Verbraucher** (Kühlschrank, Wasserpumpe, Instrumente,
   Plotter, UKW, Autopilot, Steckdosen, Stereo, Wechselrichter,
   Bilgepumpe) mit Schaltern.
@@ -241,7 +281,7 @@ So rechnet der Planer:
 
 #### Polardaten
 
-Unter **Segel → Polare** liegt die Polare des Bootes:
+Unter **Einstellungen → Segel & Polare** liegt die Polare des Bootes:
 
 * **Import** der üblichen Formate:
   * Tabellen von OpenCPN, qtVlm und ORC, auch als CSV mit Semikolon und
@@ -342,7 +382,7 @@ Passen nicht alle Bereiche ins Dock, landen die hinteren unter **Mehr**.
 
 ### Häfen online nachladen
 
-Mit Netzwerkverbindung (abschaltbar unter Offline → „Häfen online laden“):
+Mit Netzwerkverbindung (abschaltbar unter Einstellungen → Offline-Daten → „Häfen online laden“):
 
 * **Karte:** Für den sichtbaren Ausschnitt lädt die App Häfen, Marinas,
   Tankstellen, Slipanlagen, Ankerplätze und Seezeichen in Kacheln von
@@ -363,7 +403,7 @@ Mit Netzwerkverbindung (abschaltbar unter Offline → „Häfen online laden“)
 
 ### Offline-Gebiete und lokale Overpass-Instanz
 
-Unter **Offline** legt man Gebiete an, deren OpenStreetMap-Daten (Häfen,
+Unter **Einstellungen → Offline-Daten** legt man Gebiete an, deren OpenStreetMap-Daten (Häfen,
 Marinas, Tankstellen, Slipanlagen, Seezeichen, Küste, Orte) lokal
 gespeichert und in eine **eigene Overpass-API-Instanz** importiert werden.
 Abfragen laufen danach ohne Internet.
@@ -390,7 +430,7 @@ Die Kacheln werden zusammengeführt (IDs eindeutig und sortiert) und als
 `regions/<id>.osm` gespeichert; alle Gebiete zusammen ergeben
 `combined.osm`.
 
-**Overpass-Backend** (Offline → Overpass-Einstellungen):
+**Overpass-Backend** (Offline-Daten → Overpass-Einstellungen):
 
 | Backend | Plattform | Einrichtung |
 | --- | --- | --- |
@@ -482,7 +522,7 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--center lat,lon[,maßstab]` | zentriert die Karte, z. B. `40.84,-73.93,15000` |
 | `--view cockpit\|chart\|boat` | Startansicht |
 | `--day` | startet im Tagmodus |
-| `--page N` | öffnet das Seitenpanel N (0 Karten, 1 Routen …) |
+| `--page NAME` | öffnet eine Seite: `settings`, `routes`, `general`, `charts`, `data`, `offline`, `sails`, `scenes`, `automations` (oder ihre Nummer) |
 | `--import-osm datei.osm` | importiert eine OSM-XML-Datei als Offline-Gebiet |
 | `--select-area` | startet die Auswahl eines Kartenausschnitts |
 | `--fresh` | nutzt temporäre Einstellungen und Daten; die echte Konfiguration bleibt unberührt |
@@ -545,7 +585,9 @@ qt/
 │   ├── Polar              Polardaten (Formate, Interpolation, VMG)
 │   ├── WeatherModels      Modellvorhersagen entlang der Route (Open-Meteo)
 │   ├── Voyage             gespeicherte Reisen und Offline-Vorbereitung
-│   ├── BoatSystems        Bordsysteme (Räume, Tanks, Victron, Webasto, Licht)
+│   ├── BoatSystems        Bordsysteme (Räume, Tanks, Victron, Webasto,
+│   │                      Warmwasser, Licht, Szenen)
+│   ├── Automation         Automationen (Aktionen, Zeitplan, Speicher)
 │   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge,
 │   │                      OnlineOsm (öffentliche Server, Kachel-Cache, Nominatim)
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
@@ -561,6 +603,7 @@ qt/
 │   ├── PolarPanel         Polardiagramm, Import, Tabelleneditor
 │   ├── VoyageList         Reisen (offline)
 │   ├── BoatView           Ansicht „Boot“: Kabinen-Layout und Systemkarten
+│   ├── BoatPages          Lichtszenen-Editor, Automationen
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

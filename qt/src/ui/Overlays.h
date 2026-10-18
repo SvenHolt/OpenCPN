@@ -57,15 +57,16 @@ class BottomDock : public QWidget {
   Q_OBJECT
 public:
   explicit BottomDock(QWidget* parent = nullptr);
-  /** Adds a section button; returns its index (== drawer page index). */
-  int addSection(const QString& icon, const QString& label);
+  /** Adds a main menu button that opens drawer page `page`. */
+  void addSection(const QString& icon, const QString& label, int page);
   /** 0 = cockpit, 1 = chart, 2 = boat systems */
   void setActiveView(int view);
-  void setActiveSection(int s);
+  /** Highlights the button of drawer page `page` (-1: none). */
+  void setActiveSection(int page);
   static constexpr int kHeight = 76;
 
 signals:
-  void sectionRequested(int section);
+  void sectionRequested(int page);
   void viewRequested(int view);
   void mobRequested();
 
@@ -79,6 +80,7 @@ private:
   void fitSections();
   QVector<DockButton*> m_buttons;
   QStringList m_icons, m_labels;
+  QVector<int> m_pages;
   DockButton* m_more;
   int m_active = -1;
   DockButton* m_views[3];

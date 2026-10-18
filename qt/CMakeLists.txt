@@ -81,6 +81,7 @@ set(OCPN_QT_CORE_SOURCES
   src/core/WeatherModels.cpp
   src/core/Voyage.cpp
   src/core/BoatSystems.cpp
+  src/core/Automation.cpp
   src/core/charts/Chart.cpp
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
@@ -125,6 +126,7 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/PolarPanel.cpp
   src/ui/VoyageList.cpp
   src/ui/BoatView.cpp
+  src/ui/BoatPages.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp

@@ -887,3 +887,44 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
   l->addWidget(about);
   l->addStretch(1);
 }
+
+// --------------------------------------------------------------------------
+
+SettingsHub::SettingsHub(QWidget* parent) : ListPage(parent) {
+  connect(&Theme::instance(), &Theme::changed, this, &SettingsHub::rebuild);
+}
+
+void SettingsHub::addGroup(const QString& title) {
+  m_entries << Entry{{}, title, {}, -1};
+  rebuild();
+}
+
+void SettingsHub::addEntry(const QString& icon, const QString& title,
+                           const QString& subtitle, int page) {
+  m_entries << Entry{icon, title, subtitle, page};
+  rebuild();
+}
+
+void SettingsHub::rebuild() {
+  clearRows();
+  const Palette& pal = Theme::p();
+  for (const Entry& e : m_entries) {
+    if (e.page < 0) {
+      auto* l = label(e.title, "section");
+      l->setContentsMargins(4, 10, 0, 2);
+      addRow(l);
+      continue;
+    }
+    auto* row = new ListRow;
+    row->setObjectName("settings-" + e.icon);
+    auto* l = new QHBoxLayout(row);
+    l->setContentsMargins(14, 10, 12, 10);
+    l->setSpacing(12);
+    l->addWidget(iconLabel(e.icon, pal.accentBright));
+    l->addWidget(textColumn(e.title, e.subtitle), 1);
+    l->addWidget(iconLabel("chevron", pal.textDim, 18));
+    connect(row, &ListRow::clicked, this,
+            [this, page = e.page] { emit pageRequested(page); });
+    addRow(row);
+  }
+}

@@ -71,12 +71,24 @@ public:
   explicit BoatView(QWidget* parent = nullptr);
   void setLeftInset(int px);
 
+signals:
+  void editScenesRequested();
+  void automationsRequested();
+
 protected:
   void paintEvent(QPaintEvent*) override;
 
 private:
   void sync();
-  QWidget* card(const QString& title, QWidget* content);
+  void rebuildScenes();
+  void rebuildAutomations();
+  QWidget* card(const QString& title, QWidget* content,
+                QWidget* action = nullptr);
+  class QGridLayout* m_sceneRow;
+  QVBoxLayout* m_automations;
+  QLabel* m_zones;
+  QLabel* m_water;
+  class ToggleSwitch* m_waterOn;
   QWidget* m_left;
   CabinLayout* m_layout;
   QButtonGroup* m_scenes;
