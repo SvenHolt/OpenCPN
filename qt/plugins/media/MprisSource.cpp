@@ -1,6 +1,7 @@
 #include "MprisSource.h"
 
 #ifdef OCPN_MEDIA_HAVE_DBUS
+#include <algorithm>
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>

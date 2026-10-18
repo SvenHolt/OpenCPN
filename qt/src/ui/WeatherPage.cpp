@@ -1,5 +1,6 @@
 #include "ui/WeatherPage.h"
 
+#include <algorithm>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -13,6 +14,7 @@
 #include <QStandardPaths>
 #include <QVBoxLayout>
 #include <cmath>
+#include <iterator>
 
 #include "core/AppSettings.h"
 #include "core/GeoMath.h"

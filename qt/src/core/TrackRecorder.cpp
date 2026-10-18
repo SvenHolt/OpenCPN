@@ -1,5 +1,6 @@
 #include "core/TrackRecorder.h"
 
+#include <algorithm>
 #include <QDir>
 #include <QStandardPaths>
 #include <cmath>

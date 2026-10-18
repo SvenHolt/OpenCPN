@@ -1,5 +1,6 @@
 #include "ui/TracksPage.h"
 
+#include <algorithm>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>

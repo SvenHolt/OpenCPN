@@ -1,5 +1,6 @@
 #include "core/Tides.h"
 
+#include <algorithm>
 #include <QFile>
 #include <QTextStream>
 #include <QtConcurrent>

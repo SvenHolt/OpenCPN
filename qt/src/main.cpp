@@ -23,6 +23,11 @@
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
 
+#ifdef OCPN_QT_STATIC_MEDIA_PLUGIN
+#include <QtPlugin>
+Q_IMPORT_PLUGIN(MediaPlugin)
+#endif
+
 namespace {
 
 QString findDataDir() {

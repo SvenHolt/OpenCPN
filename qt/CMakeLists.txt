@@ -9,6 +9,27 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
+add_compile_definitions(_USE_MATH_DEFINES NOMINMAX)
+if(MSVC)
+  add_compile_options(/utf-8 /bigobj /permissive-)
+endif()
+
+# Shared core/ui libraries let external plugins share the application's
+# singletons. On Windows everything is linked statically (no DLL export
+# annotations) and the bundled plugins are compiled in as static plugins.
+if(WIN32)
+  set(OCPN_QT_SHARED_DEFAULT OFF)
+else()
+  set(OCPN_QT_SHARED_DEFAULT ON)
+endif()
+option(OCPN_QT_SHARED "Build core/ui as shared libraries with loadable plugins"
+       ${OCPN_QT_SHARED_DEFAULT})
+if(OCPN_QT_SHARED)
+  set(OCPN_QT_LIB_TYPE SHARED)
+else()
+  set(OCPN_QT_LIB_TYPE STATIC)
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Svg Concurrent)
 find_package(Qt6 QUIET COMPONENTS SerialPort)
 
@@ -34,6 +55,9 @@ target_include_directories(ocpnqt_s57reader PUBLIC
 set_target_properties(ocpnqt_s57reader PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   target_compile_options(ocpnqt_s57reader PRIVATE -w)
+elseif(MSVC)
+  target_compile_options(ocpnqt_s57reader PRIVATE /w)
+  target_compile_definitions(ocpnqt_s57reader PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 set(OCPN_QT_CORE_SOURCES
@@ -63,7 +87,7 @@ set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
 set(OCPN_QT_PLUGIN_DIR ${CMAKE_INSTALL_LIBDIR}/opencpn-qt/plugins)
 
-add_library(ocpnqt_core SHARED ${OCPN_QT_CORE_SOURCES})
+add_library(ocpnqt_core ${OCPN_QT_LIB_TYPE} ${OCPN_QT_CORE_SOURCES})
 target_include_directories(ocpnqt_core PUBLIC src)
 target_link_libraries(ocpnqt_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network
   Qt6::Concurrent PRIVATE ocpnqt_s57reader)
@@ -72,7 +96,7 @@ if(Qt6SerialPort_FOUND)
   target_compile_definitions(ocpnqt_core PUBLIC OCPN_QT_HAVE_SERIAL)
 endif()
 
-add_library(ocpnqt_ui SHARED
+add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/Theme.cpp
   src/ui/Icons.cpp
   src/ui/GlassPanel.cpp
@@ -100,9 +124,11 @@ target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_INSTALL_DATA_DIR="${CMAKE_INSTALL_PREFIX}/share/opencpn")
 
 install(TARGETS opencpn-qt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(TARGETS ocpnqt_core ocpnqt_ui
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(OCPN_QT_SHARED)
+  install(TARGETS ocpnqt_core ocpnqt_ui
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 install(DIRECTORY src/api src/ui src/core
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/opencpn-qt
   FILES_MATCHING PATTERN "*.h")

@@ -42,6 +42,27 @@ void PluginManager::setEnabled(const QString& id, bool enabled) {
 
 void PluginManager::loadAll(PluginHost* host) {
   QStringList seen;
+  // Plugins compiled into the executable (Q_IMPORT_PLUGIN).
+  for (const QStaticPlugin& sp : QPluginLoader::staticPlugins()) {
+    if (sp.metaData().value("IID").toString() != OcpnPlugin_iid) continue;
+    const QJsonObject meta = sp.metaData().value("MetaData").toObject();
+    PluginInfo info;
+    info.id = meta.value("id").toString();
+    info.name = meta.value("name").toString(info.id);
+    info.description = meta.value("description").toString();
+    info.version = meta.value("version").toString();
+    info.file = tr("built-in");
+    info.enabled = isEnabled(info.id);
+    seen << info.id;
+    if (info.enabled) {
+      if (auto* plugin = qobject_cast<OcpnPlugin*>(sp.instance())) {
+        plugin->init(host);
+        m_active << plugin;
+        info.loaded = true;
+      }
+    }
+    m_infos << info;
+  }
   for (const QString& dir : searchPaths()) {
     const QDir d(dir);
     if (!d.exists()) continue;

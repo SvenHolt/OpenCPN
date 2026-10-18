@@ -1,5 +1,6 @@
 #include "core/Grib.h"
 
+#include <algorithm>
 #include <QFile>
 #include <QMap>
 #include <cmath>

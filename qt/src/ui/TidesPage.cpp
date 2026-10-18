@@ -1,5 +1,6 @@
 #include "ui/TidesPage.h"
 
+#include <algorithm>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>

@@ -15,12 +15,21 @@ if(Qt6DBus_FOUND)
   target_compile_definitions(media_pi_core PUBLIC OCPN_MEDIA_HAVE_DBUS)
 endif()
 
-add_library(media_pi MODULE MediaPlugin.cpp media.json)
-target_link_libraries(media_pi PRIVATE media_pi_core ocpnqt_ui)
-set_target_properties(media_pi PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
-  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
-  INSTALL_RPATH "$ORIGIN/../..")
-install(TARGETS media_pi
-  LIBRARY DESTINATION ${OCPN_QT_PLUGIN_DIR}
-  RUNTIME DESTINATION ${OCPN_QT_PLUGIN_DIR})
+if(OCPN_QT_SHARED)
+  add_library(media_pi MODULE MediaPlugin.cpp media.json)
+  target_link_libraries(media_pi PRIVATE media_pi_core ocpnqt_ui)
+  set_target_properties(media_pi PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
+    INSTALL_RPATH "$ORIGIN/../..")
+  install(TARGETS media_pi
+    LIBRARY DESTINATION ${OCPN_QT_PLUGIN_DIR}
+    RUNTIME DESTINATION ${OCPN_QT_PLUGIN_DIR})
+else()
+  # Compiled into the executable and registered with Q_IMPORT_PLUGIN.
+  add_library(media_pi STATIC MediaPlugin.cpp media.json)
+  target_compile_definitions(media_pi PRIVATE QT_STATICPLUGIN)
+  target_link_libraries(media_pi PRIVATE media_pi_core ocpnqt_ui)
+  target_link_libraries(opencpn-qt PRIVATE media_pi)
+  target_compile_definitions(opencpn-qt PRIVATE OCPN_QT_STATIC_MEDIA_PLUGIN)
+endif()

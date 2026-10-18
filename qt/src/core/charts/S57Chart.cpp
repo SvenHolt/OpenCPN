@@ -1,5 +1,6 @@
 #include "core/charts/S57Chart.h"
 
+#include <algorithm>
 #include <QFile>
 #include <QFileInfo>
 #include <QPainter>

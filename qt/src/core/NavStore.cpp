@@ -1,5 +1,6 @@
 #include "core/NavStore.h"
 
+#include <algorithm>
 #include <QDir>
 #include <QSet>
 #include <QStandardPaths>

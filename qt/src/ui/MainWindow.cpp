@@ -1,5 +1,6 @@
 #include "ui/MainWindow.h"
 
+#include <algorithm>
 #include <QKeyEvent>
 #include <QMenu>
 

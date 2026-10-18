@@ -1,5 +1,6 @@
 #include "ui/ChartView.h"
 
+#include <algorithm>
 #include <QContextMenuEvent>
 #include <QGestureEvent>
 #include <QMouseEvent>

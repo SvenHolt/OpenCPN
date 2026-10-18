@@ -1,5 +1,6 @@
 #include "core/charts/BsbChart.h"
 
+#include <algorithm>
 #include <QFile>
 #include <QFileInfo>
 #include <QPainter>
