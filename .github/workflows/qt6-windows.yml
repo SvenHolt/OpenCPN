@@ -53,8 +53,9 @@ jobs:
             # ctest shows nothing for a test that dies early (e.g. a missing
             # DLL or an abort); run the suites directly to see why.
             foreach ($t in Get-ChildItem Release/ocpnqt_*tests.exe) {
-              & $t.FullName -silent
+              & $t.FullName -o "$($t.BaseName).txt,txt"
               "$($t.Name): exit code $LASTEXITCODE"
+              if ($LASTEXITCODE -ne 0) { Get-Content "$($t.BaseName).txt" }
             }
             exit 1
           }
