@@ -130,8 +130,9 @@ private slots:
     QCOMPARE(*got.last().awa, 90.0);
     QVERIFY(qAbs(*got.last().aws - 19.44) < 0.01);  // m/s -> kn
     QVERIFY(!p.parseLine(NmeaParser::makeSentence("IIMWV,090,R,10.0,N,V")));
-    QVERIFY(p.parseLine(NmeaParser::makeSentence("IIMWD,245.0,T,242.0,M,"
-                                                 "18.2,N,9.4,M")));
+    QVERIFY(
+        p.parseLine(NmeaParser::makeSentence("IIMWD,245.0,T,242.0,M,"
+                                             "18.2,N,9.4,M")));
     QCOMPARE(*got.last().twd, 245.0);
     QCOMPARE(*got.last().tws, 18.2);
     QVERIFY(p.parseLine(NmeaParser::makeSentence("SDDBT,32.8,f,10.0,M,5.5,F")));
