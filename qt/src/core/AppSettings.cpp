@@ -22,6 +22,11 @@ void AppSettings::load() {
   cpaAlarmNm = s.value("cpaAlarmNm", cpaAlarmNm).toDouble();
   tcpaAlarmMin = s.value("tcpaAlarmMin", tcpaAlarmMin).toDouble();
   arrivalRadiusNm = s.value("arrivalRadiusNm", arrivalRadiusNm).toDouble();
+  shallowDepth = s.value("shallowDepth", shallowDepth).toDouble();
+  safetyDepth = s.value("safetyDepth", safetyDepth).toDouble();
+  deepDepth = s.value("deepDepth", deepDepth).toDouble();
+  showChartOutlines = s.value("showChartOutlines", showChartOutlines).toBool();
+  trackRecording = s.value("trackRecording", trackRecording).toBool();
   s.endGroup();
 }
 
@@ -38,6 +43,11 @@ void AppSettings::save() {
   s.setValue("cpaAlarmNm", cpaAlarmNm);
   s.setValue("tcpaAlarmMin", tcpaAlarmMin);
   s.setValue("arrivalRadiusNm", arrivalRadiusNm);
+  s.setValue("shallowDepth", shallowDepth);
+  s.setValue("safetyDepth", safetyDepth);
+  s.setValue("deepDepth", deepDepth);
+  s.setValue("showChartOutlines", showChartOutlines);
+  s.setValue("trackRecording", trackRecording);
   s.endGroup();
 }
 

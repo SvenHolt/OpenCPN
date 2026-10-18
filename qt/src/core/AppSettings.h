@@ -24,6 +24,13 @@ public:
   double cpaAlarmNm = 0.5;
   double tcpaAlarmMin = 15;
   double arrivalRadiusNm = 0.05;
+  // Chart depth shading (meters)
+  double shallowDepth = 2;
+  double safetyDepth = 5;
+  double deepDepth = 20;
+  bool showChartOutlines = true;
+  // Track recording
+  bool trackRecording = true;
 
   void load();
   void save();

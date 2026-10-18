@@ -6,6 +6,7 @@
 #include <QWidget>
 #include <memory>
 
+#include "api/OcpnPlugin.h"
 #include "ui/ChartView.h"
 
 class InstrumentCard;
@@ -17,11 +18,23 @@ class RouteEditBar;
 class TargetCard;
 class SideDrawer;
 
-class MainWindow : public QWidget {
+class MainWindow : public QWidget, public PluginHost {
   Q_OBJECT
 public:
   explicit MainWindow(std::shared_ptr<const LandData> land,
                       QWidget* parent = nullptr);
+  ~MainWindow() override;
+
+  // PluginHost
+  int addSection(const QString& icon, const QString& title,
+                 QWidget* page) override;
+  void addOverlay(QWidget* widget, Qt::Corner corner) override;
+  void addMapLayer(MapLayer* layer) override;
+  void showMessage(const QString& text, bool alarm = false) override;
+  void openSection(int section) override;
+  ChartView* chartView() const override { return m_chart; }
+  NavStore& navigation() const override;
+  QWidget* mainWindow() const override { return const_cast<MainWindow*>(this); }
 
   ChartView* chart() const { return m_chart; }
   SideDrawer* drawer() const { return m_drawer; }
@@ -30,6 +43,7 @@ public:
 protected:
   void resizeEvent(QResizeEvent*) override;
   void keyPressEvent(QKeyEvent*) override;
+  bool eventFilter(QObject* o, QEvent* e) override;
 
 private:
   void layoutOverlays(bool animate = false);
@@ -47,4 +61,6 @@ private:
   TargetCard* m_target;
   SideDrawer* m_drawer;
   QPropertyAnimation m_instrumentsAnim;
+  QVector<QPair<QWidget*, Qt::Corner>> m_overlays;
+  int m_routesSection = -1;
 };

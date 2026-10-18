@@ -56,8 +56,9 @@ private:
 class BottomDock : public QWidget {
   Q_OBJECT
 public:
-  enum Section { Routes, Marks, Ais, Connections, Settings, SectionCount };
   explicit BottomDock(QWidget* parent = nullptr);
+  /** Adds a section button; returns its index (== drawer page index). */
+  int addSection(const QString& icon, const QString& label);
   void setActiveSection(int s);
   static constexpr int kHeight = 76;
 
@@ -70,7 +71,9 @@ protected:
 
 private:
   void updateStatus();
-  DockButton* m_buttons[SectionCount];
+  void resizeEvent(QResizeEvent*) override;
+  QVector<DockButton*> m_buttons;
+  class QHBoxLayout* m_sectionLayout;
   DockButton* m_theme;
   QLabel* m_clock;
   QLabel* m_status;

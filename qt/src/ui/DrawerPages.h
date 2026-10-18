@@ -115,6 +115,17 @@ private:
   QStringList m_lastSentences;
 };
 
+class ChartsPage : public ListPage {
+  Q_OBJECT
+public:
+  explicit ChartsPage(ChartView* chart, QWidget* parent = nullptr);
+
+private:
+  void rebuild();
+  ChartView* m_chart;
+  QLabel* m_status;
+};
+
 class SettingsPage : public QWidget {
   Q_OBJECT
 public:

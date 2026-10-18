@@ -1,5 +1,6 @@
 #include "core/GpxIO.h"
 
+#include <QDateTime>
 #include <QFile>
 #include <QSaveFile>
 #include <QXmlStreamReader>
@@ -20,6 +21,8 @@ Waypoint readPoint(QXmlStreamReader& x) {
       w.symbol = x.readElementText();
     else if (n == u"desc")
       w.description = x.readElementText();
+    else if (n == u"time")
+      w.time = QDateTime::fromString(x.readElementText(), Qt::ISODate);
     else if (n == u"extensions") {
       while (x.readNextStartElement()) {
         if (x.name() == u"guid")
@@ -68,6 +71,12 @@ void writePoint(QXmlStreamWriter& w, const char* tag, const Waypoint& p) {
   w.writeStartElement(tag);
   w.writeAttribute("lat", QString::number(p.lat, 'f', 9));
   w.writeAttribute("lon", QString::number(p.lon, 'f', 9));
+  if (p.time.isValid())
+    w.writeTextElement("time", p.time.toUTC().toString(Qt::ISODate));
+  if (QByteArray(tag) == "trkpt") {
+    w.writeEndElement();
+    return;
+  }
   w.writeTextElement("name", p.name);
   if (!p.description.isEmpty()) w.writeTextElement("desc", p.description);
   w.writeTextElement("sym", p.symbol);
@@ -132,6 +141,17 @@ QByteArray serialize(const GpxData& d) {
     w.writeTextElement("opencpn:guid", r.id);
     w.writeEndElement();
     for (const auto& p : r.points) writePoint(w, "rtept", p);
+    w.writeEndElement();
+  }
+  for (const auto& t : d.tracks) {
+    w.writeStartElement("trk");
+    w.writeTextElement("name", t.name);
+    w.writeStartElement("extensions");
+    w.writeTextElement("opencpn:guid", t.id);
+    w.writeEndElement();
+    w.writeStartElement("trkseg");
+    for (const auto& p : t.points) writePoint(w, "trkpt", p);
+    w.writeEndElement();
     w.writeEndElement();
   }
   w.writeEndElement();

@@ -145,6 +145,64 @@ void Theme::setDark(bool dark) {
   emit changed();
 }
 
+ChartStyle Theme::chartStyle() {
+  const Palette& p = instance().m_palette;
+  const auto& cfg = AppSettings::instance();
+  ChartStyle s;
+  s.dark = p.dark;
+  s.shallowDepth = cfg.shallowDepth;
+  s.safetyDepth = cfg.safetyDepth;
+  s.deepDepth = cfg.deepDepth;
+  s.land = p.land;
+  s.landEdge = p.landEdge;
+  if (p.dark) {
+    s.coast = QColor("#56606c");
+    s.depthDeep = p.water;
+    s.depthMedium = QColor("#0d1824");
+    s.depthShallow = QColor("#12243a");
+    s.depthVeryShallow = QColor("#183252");
+    s.depthIntertidal = QColor("#1c2a24");
+    s.contour = QColor(120, 150, 180, 90);
+    s.safetyContour = QColor("#5d8bff");
+    s.soundingShallow = QColor("#dfe6ee");
+    s.soundingDeep = QColor("#6c7884");
+    s.text = QColor("#c5ccd5");
+    s.textHalo = p.water;
+    s.magenta = QColor("#c25bc0");
+    s.red = QColor("#e0483e");
+    s.green = QColor("#38b55a");
+    s.yellow = QColor("#d8b52c");
+    s.white = QColor("#d8dde4");
+    s.black = QColor("#15181c");
+    s.grey = QColor("#7d8794");
+    s.built = QColor("#252b33");
+    s.structure = QColor("#2e353f");
+  } else {
+    s.coast = QColor("#8d8a80");
+    s.depthDeep = QColor("#f3f7fa");
+    s.depthMedium = QColor("#dce9f3");
+    s.depthShallow = QColor("#b9d6ee");
+    s.depthVeryShallow = QColor("#8fbfe6");
+    s.depthIntertidal = QColor("#b5ccae");
+    s.contour = QColor(90, 120, 150, 120);
+    s.safetyContour = QColor("#2f5bd3");
+    s.soundingShallow = QColor("#14171c");
+    s.soundingDeep = QColor("#7d8590");
+    s.text = QColor("#3a4048");
+    s.textHalo = QColor(255, 255, 255);
+    s.magenta = QColor("#b0309f");
+    s.red = QColor("#d8282a");
+    s.green = QColor("#14984a");
+    s.yellow = QColor("#f2c618");
+    s.white = QColor("#ffffff");
+    s.black = QColor("#1b1d20");
+    s.grey = QColor("#8a929c");
+    s.built = QColor("#ebe7df");
+    s.structure = QColor("#d9d4c8");
+  }
+  return s;
+}
+
 QFont Theme::font(qreal px, QFont::Weight weight) {
   QFont f;
   f.setFamilies({"Inter", "SF Pro Display", "Segoe UI Variable", "Segoe UI",

@@ -273,23 +273,9 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   l->addWidget(mob);
   l->addStretch(1);
 
-  const struct {
-    const char* icon;
-    const char* label;
-  } sections[SectionCount] = {{"route", QT_TR_NOOP("Routes")},
-                              {"pin", QT_TR_NOOP("Marks")},
-                              {"ship", QT_TR_NOOP("AIS")},
-                              {"signal", QT_TR_NOOP("Data")},
-                              {"sliders", QT_TR_NOOP("Settings")}};
-  for (int i = 0; i < SectionCount; ++i) {
-    m_buttons[i] =
-        new DockButton(sections[i].icon, tr(sections[i].label), this);
-    m_buttons[i]->setCheckable(true);
-    m_buttons[i]->setMinimumWidth(84);
-    connect(m_buttons[i], &QAbstractButton::clicked, this,
-            [this, i] { emit sectionRequested(i); });
-    l->addWidget(m_buttons[i]);
-  }
+  m_sectionLayout = new QHBoxLayout;
+  m_sectionLayout->setSpacing(4);
+  l->addLayout(m_sectionLayout);
   l->addStretch(1);
 
   m_status = new QLabel(this);
@@ -322,8 +308,25 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   updateStatus();
 }
 
+int BottomDock::addSection(const QString& icon, const QString& label) {
+  const int index = int(m_buttons.size());
+  auto* b = new DockButton(icon, label, this);
+  b->setCheckable(true);
+  b->setMinimumWidth(72);
+  connect(b, &QAbstractButton::clicked, this,
+          [this, index] { emit sectionRequested(index); });
+  m_sectionLayout->addWidget(b);
+  m_buttons << b;
+  return index;
+}
+
 void BottomDock::setActiveSection(int s) {
-  for (int i = 0; i < SectionCount; ++i) m_buttons[i]->setChecked(i == s);
+  for (int i = 0; i < m_buttons.size(); ++i) m_buttons[i]->setChecked(i == s);
+}
+
+void BottomDock::resizeEvent(QResizeEvent*) {
+  // The source summary is the first thing to go on narrow screens.
+  m_status->setVisible(width() >= 1500);
 }
 
 void BottomDock::updateStatus() {

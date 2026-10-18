@@ -15,8 +15,10 @@
 
 #include "core/NavStore.h"
 #include "core/Shapefile.h"
+#include "core/charts/ChartDatabase.h"
 
 class QGestureEvent;
+class MapLayer;
 
 /** Immutable basemap polygons at two levels of detail. */
 struct LandData {
@@ -76,6 +78,16 @@ public:
 
   QPointF screenPos(double lat, double lon) const;
   void geoPos(const QPointF& screen, double& lat, double& lon) const;
+  /** Normalized mercator -> screen transform (wrap: world copy offset). */
+  QTransform worldTransform(double wrap = 0) const {
+    return worldToScreen(wrap);
+  }
+  /** Current display scale (1:x). */
+  double displayScale() const;
+
+  /** Overlay layers (weather, tides, tracks, plugins). Not owned. */
+  void addLayer(MapLayer* layer);
+  void removeLayer(MapLayer* layer);
 
 signals:
   void viewChanged();
@@ -116,8 +128,9 @@ private:
 
   void viewModified();
   void scheduleLandRender();
-  static QImage renderLand(std::shared_ptr<const LandData> land, ViewParams v,
-                           QColor color);
+  static QImage renderLand(std::shared_ptr<const LandData> land,
+                           std::shared_ptr<const ChartList> charts,
+                           ViewParams v, QColor color, ChartStyle style);
   void animateTo(QPointF center, double scale);
   void followShip();
   void handleGesture(QGestureEvent* e);
@@ -130,8 +143,12 @@ private:
   void drawAis(QPainter& p);
   void drawOwnShip(QPainter& p);
   void drawScaleBar(QPainter& p);
+  void drawChartOutlines(QPainter& p);
+  void drawLayers(QPainter& p, bool above);
 
   std::shared_ptr<const LandData> m_land;
+  std::shared_ptr<const ChartList> m_charts;
+  QVector<MapLayer*> m_layers;
   QPointF m_center{0.5, 0.33};
   double m_scale = 4096;
   double m_rotation = 0;

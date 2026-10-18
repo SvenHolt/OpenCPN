@@ -10,6 +10,9 @@
 #include "ui/Overlays.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
+#include "ui/TidesPage.h"
+#include "ui/TracksPage.h"
+#include "ui/WeatherPage.h"
 
 namespace {
 constexpr int kGap = 16;  // distance of floating panels to the edges
@@ -38,11 +41,19 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
 
   auto* routes = new RoutesPage(m_chart);
   auto* ais = new AisPage(m_chart);
-  m_drawer->addPage(tr("Routes"), routes);
-  m_drawer->addPage(tr("Marks"), new MarksPage(m_chart));
-  m_drawer->addPage(tr("AIS targets"), ais);
-  m_drawer->addPage(tr("Data sources"), new ConnectionsPage);
-  m_drawer->addPage(tr("Settings"), new SettingsPage);
+  addSection("chart", tr("Charts"), new ChartsPage(m_chart));
+  m_routesSection = addSection("route", tr("Routes"), routes);
+  addSection("pin", tr("Marks"), new MarksPage(m_chart));
+  addSection("flag", tr("Tracks"), new TracksPage(m_chart));
+  m_chart->addLayer(new TrackLayer(this));
+  addSection("ship", tr("AIS"), ais);
+  addSection("tide", tr("Tides"), new TidesPage(m_chart));
+  m_chart->addLayer(new TideLayer(this));
+  addSection("wind", tr("Weather"), new WeatherPage(m_chart));
+  m_chart->addLayer(new GribLayer(this));
+  addOverlay(new WeatherTimeBar, Qt::BottomLeftCorner);
+  addSection("signal", tr("Data"), new ConnectionsPage);
+  addSection("sliders", tr("Settings"), new SettingsPage);
 
   connect(m_dock, &BottomDock::sectionRequested, m_drawer, &SideDrawer::toggle);
   connect(m_dock, &BottomDock::mobRequested, this,
@@ -76,6 +87,50 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
           [this] { layoutOverlays(); });
 
   layoutOverlays();
+}
+
+MainWindow::~MainWindow() = default;
+
+int MainWindow::addSection(const QString& icon, const QString& title,
+                           QWidget* page) {
+  const int index = m_drawer->addPage(title, page);
+  const int dockIndex = m_dock->addSection(icon, title);
+  Q_ASSERT(index == dockIndex);
+  Q_UNUSED(dockIndex);
+  return index;
+}
+
+void MainWindow::addOverlay(QWidget* widget, Qt::Corner corner) {
+  // Widgets that were explicitly hidden stay hidden (they show themselves
+  // when they have something to display).
+  const bool keepHidden =
+      widget->testAttribute(Qt::WA_WState_ExplicitShowHide) &&
+      widget->isHidden();
+  widget->setParent(this);
+  m_overlays.push_back({widget, corner});
+  widget->installEventFilter(this);
+  widget->setVisible(!keepHidden);
+  layoutOverlays();
+}
+
+void MainWindow::addMapLayer(MapLayer* layer) { m_chart->addLayer(layer); }
+
+void MainWindow::showMessage(const QString& text, bool alarm) {
+  m_toast->showMessage(text, alarm);
+  layoutOverlays();
+}
+
+void MainWindow::openSection(int section) { m_drawer->open(section); }
+
+NavStore& MainWindow::navigation() const { return NavStore::instance(); }
+
+bool MainWindow::eventFilter(QObject* o, QEvent* e) {
+  // Re-layout when an overlay is shown, hidden or resized.
+  if (e->type() == QEvent::Show || e->type() == QEvent::Hide ||
+      e->type() == QEvent::LayoutRequest)
+    QMetaObject::invokeMethod(
+        this, [this] { layoutOverlays(); }, Qt::QueuedConnection);
+  return QWidget::eventFilter(o, e);
 }
 
 void MainWindow::selectAisTarget(quint32 mmsi) {
@@ -131,11 +186,39 @@ void MainWindow::layoutOverlays(bool animate) {
   m_target->move(w - m_target->width() - kGap + kShadow,
                  mapH - m_target->height() - kGap + kShadow);
 
+  // Plugin overlays, stacked from their corner.
+  int bottomLeft = mapH - kGap + kShadow;
+  int bottomRight =
+      m_target->isVisible() ? m_target->y() + kShadow : mapH - kGap + kShadow;
+  int topRight = kGap - kShadow;
+  for (const auto& [widget, corner] : m_overlays) {
+    if (!widget->isVisible()) continue;
+    widget->resize(widget->sizeHint());
+    switch (corner) {
+      case Qt::BottomLeftCorner:
+        bottomLeft -= widget->height();
+        widget->move(left + kGap - kShadow, bottomLeft);
+        bottomLeft += kShadow;
+        break;
+      case Qt::TopRightCorner:
+        widget->move(w - widget->width() - kGap + kShadow - 70, topRight);
+        topRight += widget->height() - kShadow;
+        break;
+      default:
+        bottomRight -= widget->height();
+        widget->move(w - widget->width() - kGap + kShadow, bottomRight);
+        bottomRight += kShadow;
+    }
+  }
+  const bool leftStack = bottomLeft < mapH - kGap + kShadow;
+  m_chart->setInsets(left, leftStack ? mapH - bottomLeft : 0);
+
   m_chart->lower();
   m_instruments->raise();
   m_guidance->raise();
   m_controls->raise();
   m_target->raise();
+  for (const auto& o : m_overlays) o.first->raise();
   m_drawer->raise();
   m_routeBar->raise();
   m_toast->raise();
@@ -180,7 +263,7 @@ void MainWindow::endRouteCreate(bool save) {
     Route r;
     r.points = pts;
     NavStore::instance().addRoute(r);
-    m_drawer->open(BottomDock::Routes);
+    m_drawer->open(m_routesSection);
   }
   layoutOverlays();
 }

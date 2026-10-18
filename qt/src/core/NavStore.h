@@ -29,6 +29,7 @@ struct Waypoint {
   double lat = 0, lon = 0;
   QString symbol = QStringLiteral("circle");
   QString description;
+  QDateTime time;  // track points
 };
 
 struct Route {

@@ -12,6 +12,30 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Svg Concurrent)
 find_package(Qt6 QUIET COMPONENTS SerialPort)
 
+# S-57 support reuses OpenCPN's wx-free ISO 8211 / OGR / S-57 reader libs.
+set(OCPN_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/../libs)
+file(GLOB OCPN_GDAL_SRC ${OCPN_LIBS}/gdal/src/*.cpp)
+file(GLOB OCPN_ISO8211_SRC ${OCPN_LIBS}/iso8211/src/*.cpp)
+add_library(ocpnqt_s57reader STATIC
+  ${OCPN_GDAL_SRC}
+  ${OCPN_ISO8211_SRC}
+  ${OCPN_LIBS}/s57-charts/src/ogrs57datasource.cpp
+  ${OCPN_LIBS}/s57-charts/src/ogrs57layer.cpp
+  ${OCPN_LIBS}/s57-charts/src/s57classregistrar.cpp
+  ${OCPN_LIBS}/s57-charts/src/s57featuredefns.cpp
+  ${OCPN_LIBS}/s57-charts/src/s57reader.cpp
+)
+# s57-charts must come first: iso8211 ships an older s57.h.
+target_include_directories(ocpnqt_s57reader PUBLIC
+  ${OCPN_LIBS}/s57-charts/include
+  ${OCPN_LIBS}/gdal/include
+  ${OCPN_LIBS}/gdal/include/gdal
+  ${OCPN_LIBS}/iso8211/include)
+set_target_properties(ocpnqt_s57reader PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  target_compile_options(ocpnqt_s57reader PRIVATE -w)
+endif()
+
 set(OCPN_QT_CORE_SOURCES
   src/core/GeoMath.cpp
   src/core/Nmea.cpp
@@ -22,11 +46,20 @@ set(OCPN_QT_CORE_SOURCES
   src/core/Connections.cpp
   src/core/Simulator.cpp
   src/core/AppSettings.cpp
+  src/core/TrackRecorder.cpp
+  src/core/Tides.cpp
+  src/core/Grib.cpp
+  src/core/GribDownload.cpp
+  src/core/charts/Chart.cpp
+  src/core/charts/BsbChart.cpp
+  src/core/charts/S57Chart.cpp
+  src/core/charts/ChartDatabase.cpp
 )
 
 add_library(ocpnqt_core STATIC ${OCPN_QT_CORE_SOURCES})
 target_include_directories(ocpnqt_core PUBLIC src)
-target_link_libraries(ocpnqt_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network)
+target_link_libraries(ocpnqt_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network
+  Qt6::Concurrent PRIVATE ocpnqt_s57reader)
 if(Qt6SerialPort_FOUND)
   target_link_libraries(ocpnqt_core PUBLIC Qt6::SerialPort)
   target_compile_definitions(ocpnqt_core PUBLIC OCPN_QT_HAVE_SERIAL)
@@ -41,6 +74,12 @@ add_library(ocpnqt_ui STATIC
   src/ui/SideDrawer.cpp
   src/ui/DrawerPages.cpp
   src/ui/MainWindow.cpp
+  src/ui/MapLayer.h
+  src/ui/PluginManager.cpp
+  src/ui/TracksPage.cpp
+  src/ui/TidesPage.cpp
+  src/ui/WeatherPage.cpp
+  src/api/OcpnPlugin.h
 )
 target_link_libraries(ocpnqt_ui PUBLIC ocpnqt_core Qt6::Widgets Qt6::Svg
   Qt6::Concurrent)
@@ -63,7 +102,23 @@ if(OCPN_QT_BUILD_TESTS)
     enable_testing()
     add_executable(ocpnqt_tests tests/test_core.cpp)
     target_link_libraries(ocpnqt_tests PRIVATE ocpnqt_core Qt6::Test)
+    target_compile_definitions(ocpnqt_tests PRIVATE
+      OCPN_QT_SOURCE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
     add_test(NAME ocpnqt_tests COMMAND ocpnqt_tests)
+    add_executable(ocpnqt_chart_tests tests/test_charts.cpp)
+    target_link_libraries(ocpnqt_chart_tests PRIVATE ocpnqt_core Qt6::Test)
+    target_compile_definitions(ocpnqt_chart_tests PRIVATE
+      OCPN_QT_SOURCE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data"
+      OCPN_QT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+    add_test(NAME ocpnqt_chart_tests COMMAND ocpnqt_chart_tests)
+    set_tests_properties(ocpnqt_chart_tests PROPERTIES
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_executable(ocpnqt_grib_tests tests/test_grib.cpp)
+    target_link_libraries(ocpnqt_grib_tests PRIVATE ocpnqt_core Qt6::Test
+      Qt6::Network)
+    target_compile_definitions(ocpnqt_grib_tests PRIVATE
+      OCPN_QT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+    add_test(NAME ocpnqt_grib_tests COMMAND ocpnqt_grib_tests)
     add_executable(ocpnqt_ui_tests tests/test_ui.cpp)
     target_link_libraries(ocpnqt_ui_tests PRIVATE ocpnqt_ui Qt6::Test)
     add_test(NAME ocpnqt_ui_tests COMMAND ocpnqt_ui_tests)

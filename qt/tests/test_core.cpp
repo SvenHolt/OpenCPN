@@ -6,6 +6,8 @@
 #include "core/GpxIO.h"
 #include "core/Nmea.h"
 #include "core/Simulator.h"
+#include "core/TrackRecorder.h"
+#include "core/Tides.h"
 
 class CoreTest : public QObject {
   Q_OBJECT
@@ -108,6 +110,9 @@ private slots:
     QCOMPARE(*got[1].shipType, 37);
   }
 
+  void trackRecording();
+  void tidePrediction();
+
   void gpxRoundTrip() {
     GpxData d;
     Waypoint w;
@@ -132,6 +137,102 @@ private slots:
     QCOMPARE(back.routes[0].points.size(), 2);
   }
 };
+
+void CoreTest::trackRecording() {
+  QStandardPaths::setTestModeEnabled(true);
+  auto& rec = TrackRecorder::instance();
+  rec.start();
+  QDateTime t = QDateTime::currentDateTimeUtc();
+  double lat = 54.5, lon = 10.2, cog = 0;
+  int stored = 0;
+  for (int i = 0; i < 240; ++i) {
+    if (i == 120) cog = 90;  // a turn
+    geo::destination(lat, lon, cog, 6.0 / 3600, lat, lon);
+    stored += rec.addFix(lat, lon, cog, t.addSecs(i));
+  }
+  // 6 kn for 4 minutes = 0.4 NM; thinned to a point every ~60 m.
+  QVERIFY(stored > 8 && stored < 20);
+  QVERIFY(qAbs(rec.activeTrack().lengthNm() - 0.39) < 0.05);
+  rec.stop();
+  QCOMPARE(rec.tracks().size(), 1);
+  QCOMPARE(rec.tracks()[0].points.size(), stored);
+
+  // GPX round trip keeps track points and times.
+  GpxData d;
+  d.tracks = rec.tracks();
+  GpxData back;
+  QVERIFY(GpxIO::parse(GpxIO::serialize(d), back));
+  QCOMPARE(back.tracks.size(), 1);
+  QCOMPARE(back.tracks[0].points.size(), stored);
+  QCOMPARE(back.tracks[0].points.last().time.toSecsSinceEpoch(),
+           rec.tracks()[0].points.last().time.toSecsSinceEpoch());
+  rec.removeTrack(rec.tracks()[0].id);
+}
+
+void CoreTest::tidePrediction() {
+  const QString dir = QStringLiteral(OCPN_QT_SOURCE_DATA_DIR) + "/tcdata";
+  QElapsedTimer timer;
+  timer.start();
+  QString err;
+  auto data = TideDatabase::load(dir + "/HARMONICS_NO_US",
+                                 dir + "/HARMONICS_NO_US.IDX", &err);
+  QVERIFY2(data, qPrintable(err));
+  qInfo("Tide data: %lld stations, %lld harmonic sets, %lld ms",
+        qlonglong(data->stations.size()), qlonglong(data->harmonics.size()),
+        qlonglong(timer.elapsed()));
+  QVERIFY(data->stations.size() > 3000);
+  TideDatabase::instance().setData(data);
+  auto& db = TideDatabase::instance();
+
+  const TideStation* cux = nullptr;
+  for (const auto& s : db.stations())
+    if (s.name.startsWith("Cuxhaven, Steubenhoft")) cux = &s;
+  QVERIFY(cux);
+  QCOMPARE(db.unit(*cux), QString("m"));
+  const QDateTime from(QDate(2026, 6, 1), QTime(0, 0), Qt::UTC);
+  const auto ext = db.extremes(*cux, from, from.addDays(2));
+  // Semi-diurnal: about 4 extremes per day, alternating.
+  QVERIFY(ext.size() >= 7 && ext.size() <= 9);
+  for (int i = 1; i < ext.size(); ++i) {
+    QVERIFY(ext[i].high != ext[i - 1].high);
+    const double h = ext[i - 1].time.secsTo(ext[i].time) / 3600.0;
+    QVERIFY2(h > 5 && h < 7.5, qPrintable(QString::number(h)));
+    const double range = std::fabs(ext[i].value - ext[i - 1].value);
+    // Mean tidal range at Cuxhaven is about 3 m.
+    QVERIFY2(range > 2.0 && range < 4.5, qPrintable(QString::number(range)));
+  }
+  // Cross-check against the official Canadian Hydrographic Service
+  // prediction for Halifax (api-iwls.dfo-mpo.gc.ca, wlp-hilo, 2026-06-01).
+  const TideStation* hfx = nullptr;
+  for (const auto& s : db.stations())
+    if (s.name == "Halifax, Nova Scotia") hfx = &s;
+  QVERIFY(hfx);
+  const struct {
+    const char* time;
+    double value;
+  } chs[] = {{"2026-06-01T06:43:00Z", 0.272}, {"2026-06-01T12:48:00Z", 1.63},
+             {"2026-06-01T18:52:00Z", 0.686}, {"2026-06-02T00:36:00Z", 1.71},
+             {"2026-06-02T07:17:00Z", 0.315}, {"2026-06-02T13:26:00Z", 1.625}};
+  const auto hext =
+      db.extremes(*hfx, from.addSecs(4 * 3600), from.addSecs(40 * 3600));
+  for (const auto& ref : chs) {
+    const QDateTime t = QDateTime::fromString(ref.time, Qt::ISODate);
+    const TideExtreme* match = nullptr;
+    for (const auto& e : hext)
+      if (std::abs(e.time.secsTo(t)) < 3600) match = &e;
+    QVERIFY2(match, ref.time);
+    const qint64 dtMin = std::abs(match->time.secsTo(t)) / 60;
+    qInfo("%s CHS %.2f m, ours %s %.2f m (%lld min)", ref.time, ref.value,
+          qPrintable(match->time.toString(Qt::ISODate)), match->value, dtMin);
+    QVERIFY(dtMin <= 15);
+    QVERIFY(std::fabs(match->value - ref.value) < 0.15);
+  }
+
+  // Nearest station lookup.
+  const auto near = db.nearest(53.87, 8.70, 1, TideStation::Type::Tide);
+  QCOMPARE(near.size(), 1);
+  QVERIFY(geo::distanceNm(53.87, 8.70, near[0]->lat, near[0]->lon) < 5);
+}
 
 QTEST_GUILESS_MAIN(CoreTest)
 #include "test_core.moc"

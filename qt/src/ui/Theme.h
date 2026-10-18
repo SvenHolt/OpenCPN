@@ -7,6 +7,8 @@
 #include <QFont>
 #include <QObject>
 
+#include "core/charts/Chart.h"
+
 struct Palette {
   bool dark = true;
   QColor water, waterGlow, land, landEdge;
@@ -29,6 +31,9 @@ public:
   bool isDark() const { return m_palette.dark; }
   /** Re-evaluates the theme from the settings and applies it. */
   void apply();
+
+  /** Colors for S-57/BSB chart rendering in the current theme. */
+  static ChartStyle chartStyle();
 
   /** Font helpers: display fonts are light and large, labels are small caps. */
   static QFont font(qreal pixelSize, QFont::Weight weight = QFont::Normal);

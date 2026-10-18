@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -25,6 +26,7 @@
 #include "core/Connections.h"
 #include "core/GeoMath.h"
 #include "core/GpxIO.h"
+#include "core/charts/ChartDatabase.h"
 #include "core/NavStore.h"
 #include "ui/ChartView.h"
 #include "ui/GlassPanel.h"
@@ -587,6 +589,89 @@ void ConnectionsPage::rebuild() {
 
 // --------------------------------------------------------------------------
 
+ChartsPage::ChartsPage(ChartView* chart, QWidget* parent)
+    : ListPage(parent), m_chart(chart) {
+  auto* add = button(tr("Add chart folder"), "plus", "primary");
+  connect(add, &QPushButton::clicked, this, [this] {
+    const QString dir = QFileDialog::getExistingDirectory(
+        this, tr("Chart folder"),
+        QStandardPaths::writableLocation(QStandardPaths::HomeLocation));
+    if (!dir.isEmpty()) ChartDatabase::instance().addDirectory(dir);
+  });
+  auto* rescan = button(tr("Rescan"), "undo");
+  connect(rescan, &QPushButton::clicked, this,
+          [] { ChartDatabase::instance().rescan(); });
+  auto* row = new QHBoxLayout;
+  row->addWidget(add, 1);
+  row->addWidget(rescan);
+  actions()->addLayout(row);
+  m_status = label(QString(), "dim");
+  m_status->setWordWrap(true);
+  actions()->addWidget(m_status);
+  setEmptyText(
+      tr("Add a folder with S-57 ENC cells (*.000) or BSB/KAP "
+         "raster charts. Free official ENCs are available e.g. "
+         "from NOAA (charts.noaa.gov) and many inland waterway "
+         "authorities."));
+  auto& db = ChartDatabase::instance();
+  connect(&db, &ChartDatabase::chartsChanged, this, &ChartsPage::rebuild);
+  connect(&db, &ChartDatabase::scanStarted, this,
+          [this] { m_status->setText(tr("Scanning chart folders…")); });
+  connect(&Theme::instance(), &Theme::changed, this, &ChartsPage::rebuild);
+  rebuild();
+}
+
+void ChartsPage::rebuild() {
+  clearRows();
+  const Palette& pal = Theme::p();
+  auto& db = ChartDatabase::instance();
+  const auto charts = db.charts();
+  m_status->setText(db.isScanning() ? tr("Scanning chart folders…")
+                                    : tr("%n chart(s) installed", nullptr,
+                                         int(charts->size())));
+  if (!db.directories().isEmpty()) addRow(label(tr("FOLDERS"), "section"));
+  for (const QString& dir : db.directories()) {
+    auto* r = new ListRow;
+    r->setCursor(Qt::ArrowCursor);
+    auto* l = new QHBoxLayout(r);
+    l->setContentsMargins(14, 8, 10, 8);
+    l->addWidget(iconLabel("layers", pal.textDim));
+    l->addWidget(textColumn(QFileInfo(dir).fileName(), dir), 1);
+    auto* del = new IconButton("trash", tr("Remove folder"), nullptr, true);
+    connect(del, &QAbstractButton::clicked, this, [dir] {
+      QTimer::singleShot(
+          0, [dir] { ChartDatabase::instance().removeDirectory(dir); });
+    });
+    l->addWidget(del);
+    addRow(r);
+  }
+  if (!charts->isEmpty()) addRow(label(tr("CHARTS"), "section"));
+  // Most detailed first in the list.
+  for (auto it = charts->crbegin(); it != charts->crend(); ++it) {
+    const ChartPtr c = *it;
+    auto* r = new ListRow;
+    auto* l = new QHBoxLayout(r);
+    l->setContentsMargins(14, 8, 10, 8);
+    const bool vector = c->type() == Chart::Type::Vector;
+    l->addWidget(iconLabel(vector ? "chart" : "layers",
+                           vector ? pal.accentBright : pal.warning));
+    l->addWidget(
+        textColumn(c->name(),
+                   (vector ? tr("Vector ENC") : tr("Raster chart")) +
+                       QStringLiteral(" · 1:%L1").arg(c->nativeScale())),
+        1);
+    connect(r, &ListRow::clicked, this, [this, c] {
+      double lat1, lon1, lat2, lon2;
+      geo::fromMercator(c->bounds().bottomLeft(), lat1, lon1);
+      geo::fromMercator(c->bounds().topRight(), lat2, lon2);
+      m_chart->fitGeoBounds(lat1, lon1, lat2, lon2);
+    });
+    addRow(r);
+  }
+}
+
+// --------------------------------------------------------------------------
+
 SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
   auto& s = AppSettings::instance();
   auto* outer = new QVBoxLayout(this);
@@ -679,6 +764,25 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
       dspin(s.predictorMinutes, 1, 60, 1, tr(" min"), 0, [](double v) {
         AppSettings::instance().predictorMinutes = int(v);
       })));
+
+  l->addWidget(settingRow(
+      tr("Chart outlines"),
+      toggle(s.showChartOutlines,
+             [](bool v) { AppSettings::instance().showChartOutlines = v; }),
+      tr("Show coverage of charts not drawn at this zoom")));
+  l->addWidget(settingRow(
+      tr("Shallow depth"),
+      dspin(s.shallowDepth, 0, 50, 0.5, " m", 1,
+            [](double v) { AppSettings::instance().shallowDepth = v; })));
+  l->addWidget(settingRow(
+      tr("Safety depth"),
+      dspin(s.safetyDepth, 0, 100, 0.5, " m", 1,
+            [](double v) { AppSettings::instance().safetyDepth = v; }),
+      tr("Highlights the safety contour on ENCs")));
+  l->addWidget(settingRow(tr("Deep water"),
+                          dspin(s.deepDepth, 1, 500, 1, " m", 0, [](double v) {
+                            AppSettings::instance().deepDepth = v;
+                          })));
 
   l->addWidget(label(tr("ALARMS & NAVIGATION"), "section"));
   l->addWidget(settingRow(

@@ -12,7 +12,12 @@
 #include "core/AppSettings.h"
 #include "core/Connections.h"
 #include "core/GeoMath.h"
+#include "core/Grib.h"
 #include "core/NavStore.h"
+#include "core/Tides.h"
+#include "core/TrackRecorder.h"
+#include "core/charts/ChartDatabase.h"
+#include "core/charts/S57Chart.h"
 #include "ui/MainWindow.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
@@ -110,9 +115,14 @@ int main(int argc, char** argv) {
   QCommandLineOption demo("demo", "Create and activate a demo route.");
   QCommandLineOption day("day", "Start with the day theme.");
   QCommandLineOption page("page", "Open a drawer page (0-4).", "index");
+  QCommandLineOption charts("charts", "Add a chart directory or file.", "path");
+  QCommandLineOption center(
+      "center", "Center the chart: lat,lon[,display scale].", "lat,lon,scale");
+  QCommandLineOption grib("grib", "Open a GRIB file.", "file");
   QCommandLineOption fresh("fresh",
                            "Ignore stored settings and data (testing).");
-  cli.addOptions({shot, shotSize, delay, demo, day, page, fresh});
+  cli.addOptions(
+      {shot, shotSize, delay, demo, day, page, charts, center, grib, fresh});
   cli.process(app);
 
   if (cli.isSet(fresh)) {
@@ -132,9 +142,31 @@ int main(int argc, char** argv) {
   Theme::instance().apply();
 
   auto land = loadBasemap();
+  S57Chart::setRegistryDir(findDataDir() + "/s57data");
+  ChartDatabase::instance().load();
+  TideDatabase::instance().loadAsync(findDataDir() + "/tcdata");
+  for (const QString& dir : cli.values(charts))
+    ChartDatabase::instance().addDirectory(QFileInfo(dir).absoluteFilePath());
   NavStore::instance().loadFromDisk();
+  TrackRecorder::instance().loadFromDisk();
+  if (settings.trackRecording) TrackRecorder::instance().start();
 
   MainWindow win(land);
+  if (cli.isSet(grib)) {
+    QString err;
+    if (!GribManager::instance().open(cli.value(grib), &err))
+      qWarning("GRIB: %s", qPrintable(err));
+  }
+  if (cli.isSet(center)) {
+    const QStringList v = cli.value(center).split(',');
+    QTimer::singleShot(0, &win, [&win, v] {
+      win.chart()->centerOn(v.value(0).toDouble(), v.value(1).toDouble(),
+                            false);
+      if (v.size() > 2)
+        win.chart()->zoomBy(win.chart()->displayScale() / v.value(2).toDouble(),
+                            false);
+    });
+  }
   ConnectionManager::instance().load();
 
   if (cli.isSet(shot)) {
@@ -164,6 +196,7 @@ int main(int argc, char** argv) {
       });
   }
   const int rc = app.exec();
+  TrackRecorder::instance().saveToDisk();
   for (auto* c : ConnectionManager::instance().connections()) c->stop();
   return rc;
 }

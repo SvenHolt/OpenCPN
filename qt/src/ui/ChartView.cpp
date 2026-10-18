@@ -14,6 +14,7 @@
 #include "core/AppSettings.h"
 #include "core/GeoMath.h"
 #include "ui/Icons.h"
+#include "ui/MapLayer.h"
 #include "ui/Theme.h"
 
 namespace {
@@ -71,10 +72,11 @@ ChartView::ChartView(QWidget* parent) : QWidget(parent) {
   m_renderTimer.setSingleShot(true);
   m_renderTimer.setInterval(30);
   connect(&m_renderTimer, &QTimer::timeout, this, [this] {
-    if (!m_land || m_landWatcher.isRunning()) return;
+    if (m_landWatcher.isRunning()) return;
     m_pendingParams = params();
     m_landWatcher.setFuture(QtConcurrent::run(
-        &ChartView::renderLand, m_land, m_pendingParams, Theme::p().land));
+        &ChartView::renderLand, m_land, m_charts, m_pendingParams,
+        Theme::p().land, Theme::chartStyle()));
   });
   connect(&m_landWatcher, &QFutureWatcher<QImage>::finished, this, [this] {
     m_landImage = m_landWatcher.result();
@@ -182,8 +184,18 @@ ChartView::ChartView(QWidget* parent) : QWidget(parent) {
   });
   connect(&AppSettings::instance(), &AppSettings::changed, this, [this] {
     setCourseUp(AppSettings::instance().courseUp);
+    m_landParams.size = QSize();  // depth shading may have changed
+    scheduleLandRender();
     update();
   });
+  m_charts = ChartDatabase::instance().charts();
+  connect(&ChartDatabase::instance(), &ChartDatabase::chartsChanged, this,
+          [this] {
+            m_charts = ChartDatabase::instance().charts();
+            m_landParams.size = QSize();
+            scheduleLandRender();
+            update();
+          });
 }
 
 ChartView::~ChartView() {
@@ -376,7 +388,6 @@ void ChartView::followShip() {
 // Land rendering
 
 void ChartView::scheduleLandRender() {
-  if (!m_land) return;
   if (m_landWatcher.isRunning()) {
     m_renderQueued = true;
     return;
@@ -384,37 +395,65 @@ void ChartView::scheduleLandRender() {
   if (!m_renderTimer.isActive()) m_renderTimer.start();
 }
 
-QImage ChartView::renderLand(std::shared_ptr<const LandData> land, ViewParams v,
-                             QColor color) {
+QImage ChartView::renderLand(std::shared_ptr<const LandData> land,
+                             std::shared_ptr<const ChartList> charts,
+                             ViewParams v, QColor color, ChartStyle style) {
   const QSize imgSize = v.size + QSize(2 * kLandMargin, 2 * kLandMargin);
   QImage img(imgSize, QImage::Format_ARGB32_Premultiplied);
   img.fill(Qt::transparent);
-  if (!land || v.size.isEmpty()) return img;
+  if (v.size.isEmpty()) return img;
   ViewParams iv = v;
   iv.size = imgSize;
-
-  const auto& polys = (v.scale < kDetailScale || land->detailed.isEmpty())
-                          ? land->crude
-                          : land->detailed;
-  QPainter p(&img);
-  p.setRenderHint(QPainter::Antialiasing);
-  p.setBrush(color);
-  // A hairline in the fill color hides seams between basemap tiles.
-  QPen pen(color, 1.0);
-  pen.setCosmetic(true);
-  p.setPen(pen);
   const QRectF imgRect(QPointF(0, 0), QSizeF(imgSize));
-  const double minExtent = 0.8 / v.scale;
-  for (int wrap = -1; wrap <= 1; ++wrap) {
-    const QTransform t = worldToScreen(iv, wrap);
-    const QRectF visible = t.inverted().mapRect(imgRect);
-    if (!visible.intersects(QRectF(0, 0, 1, 1))) continue;
-    p.setTransform(t);
-    for (const auto& poly : polys) {
-      if (!poly.bounds.intersects(visible)) continue;
-      if (poly.bounds.width() < minExtent && poly.bounds.height() < minExtent)
-        continue;
-      p.drawPath(poly.path);
+
+  QPainter p(&img);
+  if (land) {
+    const auto& polys = (v.scale < kDetailScale || land->detailed.isEmpty())
+                            ? land->crude
+                            : land->detailed;
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setBrush(color);
+    // A hairline in the fill color hides seams between basemap tiles.
+    QPen pen(color, 1.0);
+    pen.setCosmetic(true);
+    p.setPen(pen);
+    const double minExtent = 0.8 / v.scale;
+    for (int wrap = -1; wrap <= 1; ++wrap) {
+      const QTransform t = worldToScreen(iv, wrap);
+      const QRectF visible = t.inverted().mapRect(imgRect);
+      if (!visible.intersects(QRectF(0, 0, 1, 1))) continue;
+      p.setTransform(t);
+      for (const auto& poly : polys) {
+        if (!poly.bounds.intersects(visible)) continue;
+        if (poly.bounds.width() < minExtent && poly.bounds.height() < minExtent)
+          continue;
+        p.drawPath(poly.path);
+      }
+    }
+    p.resetTransform();
+  }
+
+  // Charts, coarse to detailed (the list is sorted by the database).
+  if (charts && !charts->isEmpty()) {
+    double lat, lon;
+    geo::fromMercator(v.center, lat, lon);
+    ChartRenderContext ctx;
+    ctx.scale = v.scale;
+    ctx.rotation = v.rotation;
+    ctx.displayScale =
+        Chart::displayScaleFor(geo::nmPerMercatorUnit(lat) / v.scale * 1852.0);
+    ctx.style = style;
+    for (const ChartPtr& chart : *charts) {
+      // Skip charts that would be drawn far too small (and too slowly).
+      const double maxUnderzoom =
+          chart->type() == Chart::Type::Raster ? 4.0 : 12.0;
+      if (ctx.displayScale > chart->nativeScale() * maxUnderzoom) continue;
+      for (int wrap = -1; wrap <= 1; ++wrap) {
+        ctx.worldToImage = worldToScreen(iv, wrap);
+        ctx.visibleWorld = ctx.worldToImage.inverted().mapRect(imgRect);
+        if (!ctx.visibleWorld.intersects(chart->bounds())) continue;
+        chart->render(p, ctx);
+      }
     }
   }
   return img;
@@ -447,13 +486,73 @@ void ChartView::paintEvent(QPaintEvent*) {
   p.fillRect(rect(), vg);
 
   p.setRenderHint(QPainter::Antialiasing);
+  drawChartOutlines(p);
   if (AppSettings::instance().showGraticule) drawGraticule(p);
+  drawLayers(p, false);
   drawRoutes(p);
   drawWaypoints(p);
   drawPendingRoute(p);
   drawAis(p);
   drawOwnShip(p);
+  drawLayers(p, true);
   drawScaleBar(p);
+}
+
+void ChartView::drawLayers(QPainter& p, bool above) {
+  for (MapLayer* l : m_layers) {
+    if (!l->isEnabled() || (l->zOrder() >= 0) != above) continue;
+    p.save();
+    l->paint(p, *this);
+    p.restore();
+  }
+}
+
+void ChartView::drawChartOutlines(QPainter& p) {
+  if (!m_charts || !AppSettings::instance().showChartOutlines) return;
+  const double ds = displayScale();
+  QColor c = Theme::p().accentBright;
+  c.setAlpha(150);
+  QPen pen(c, 1.2, Qt::DashLine);
+  pen.setCosmetic(true);
+  p.save();
+  p.setBrush(Qt::NoBrush);
+  p.setPen(pen);
+  const QTransform t = worldToScreen(0);
+  const QRectF visible = t.inverted().mapRect(QRectF(rect()));
+  int drawn = 0;
+  for (const ChartPtr& chart : *m_charts) {
+    const double maxUnderzoom =
+        chart->type() == Chart::Type::Raster ? 4.0 : 12.0;
+    // Outline only charts that are too detailed to be drawn at this zoom.
+    if (ds <= chart->nativeScale() * maxUnderzoom) continue;
+    if (!visible.intersects(chart->bounds())) continue;
+    p.setTransform(t);
+    p.drawPath(chart->coverage());
+    if (++drawn > 400) break;
+  }
+  p.restore();
+}
+
+void ChartView::addLayer(MapLayer* layer) {
+  if (m_layers.contains(layer)) return;
+  m_layers << layer;
+  std::stable_sort(
+      m_layers.begin(), m_layers.end(),
+      [](MapLayer* a, MapLayer* b) { return a->zOrder() < b->zOrder(); });
+  connect(layer, &MapLayer::changed, this, qOverload<>(&QWidget::update));
+  connect(layer, &QObject::destroyed, this,
+          [this, layer] { m_layers.removeAll(layer); });
+  update();
+}
+
+void ChartView::removeLayer(MapLayer* layer) {
+  m_layers.removeAll(layer);
+  disconnect(layer, nullptr, this, nullptr);
+  update();
+}
+
+double ChartView::displayScale() const {
+  return Chart::displayScaleFor(nmPerPixel() * 1852.0);
 }
 
 void ChartView::drawGraticule(QPainter& p) {
@@ -507,15 +606,20 @@ void ChartView::drawGraticule(QPainter& p) {
   p.setFont(Theme::font(10, QFont::DemiBold));
   p.setPen(pal.gridText);
   auto fmt = [step](double v, QChar pos, QChar neg) {
-    double a = std::fabs(v);
+    const double a = std::fabs(v);
     int d = int(a + 1e-9);
-    int m = int(std::round((a - d) * 60));
-    if (m == 60) {
+    double m = (a - d) * 60;
+    const bool tenths = step < 1.0 / 60 - 1e-9;
+    m = tenths ? std::round(m * 10) / 10 : std::round(m);
+    if (m >= 60) {
       ++d;
       m = 0;
     }
     QString s = QString::number(d) + "°";
-    if (step < 1) s += QString::number(m).rightJustified(2, '0') + "′";
+    if (step < 1)
+      s += QString::number(m, 'f', tenths ? 1 : 0)
+               .rightJustified(tenths ? 4 : 2, '0') +
+           "′";
     return s + (v >= 0 ? pos : neg);
   };
   for (const auto& l : latLabels)
