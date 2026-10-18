@@ -8,9 +8,12 @@ match what the chart renderer expects.
 import csv
 import os
 import re
+import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _DEFAULT_DIRS = [
+    # bundled by PyInstaller (see tools/seachart/windows/)
+    os.path.join(getattr(sys, "_MEIPASS", _HERE), "s57data"),
     os.path.join(_HERE, "..", "..", "..", "data", "s57data"),
     "/usr/share/opencpn/s57data",
     "/usr/local/share/opencpn/s57data",

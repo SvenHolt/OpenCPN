@@ -1,0 +1,68 @@
+---
+
+# Builds tools/seachart as a standalone seachart.exe for Windows (no Python
+# installation needed) and runs its tests.  Download the "seachart-windows"
+# artifact, unpack it anywhere and double click seachart.bat.
+
+name: seachart Windows
+
+'on':
+  push:
+    paths:
+      - 'tools/seachart/**'
+      - 'data/s57data/**'
+      - '.github/workflows/seachart-windows.yml'
+  pull_request:
+    paths:
+      - 'tools/seachart/**'
+      - '.github/workflows/seachart-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy shapely osmium pyinstaller
+
+      - name: Run tests
+        run: python -m unittest discover -s tools/seachart/tests -v
+
+      - name: Build seachart.exe
+        run: >
+          pyinstaller --onefile --name seachart --console
+          --paths tools/seachart
+          --add-data "data/s57data/s57objectclasses.csv;s57data"
+          --add-data "data/s57data/s57attributes.csv;s57data"
+          --add-data "data/s57data/s57expectedinput.csv;s57data"
+          --hidden-import osmium
+          tools/seachart/windows/entry.py
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          ./dist/seachart.exe --help
+          ./dist/seachart.exe --db smoke.db harbours add --kind anchorage \
+            --name Test --lat 54.4 --lon 10.2
+          ./dist/seachart.exe --db smoke.db harbours list | grep Test
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p package
+          cp dist/seachart.exe tools/seachart/windows/seachart.bat \
+            tools/seachart/windows/seachart.ps1 tools/seachart/README.md \
+            package/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seachart-windows
+          path: package/

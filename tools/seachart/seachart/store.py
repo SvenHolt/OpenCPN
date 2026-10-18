@@ -3,10 +3,15 @@
 * ``features``  OSM / OpenSeaMap objects (tags as JSON, geometry as WKB)
 * ``grids``     bathymetry grid chunks (float32 depth, positive down)
 * ``downloads`` which source covered which bounding box, and when
+* ``harbours``, ``photos``  marinas/anchorages maintained by the user
+* ``pois``      restaurants, shops, ... near harbours (OpenStreetMap)
+* ``weather``   hourly forecast on a grid (Open-Meteo)
+* ``navgrid``   water/depth raster used by OpenCPN's passage planner
 """
 
 import datetime
 import json
+import os
 import sqlite3
 
 import numpy as np
@@ -25,12 +30,54 @@ CREATE VIRTUAL TABLE IF NOT EXISTS grids_idx USING rtree(
     id, minx, maxx, miny, maxy);
 CREATE TABLE IF NOT EXISTS downloads (
     source TEXT, minx REAL, miny REAL, maxx REAL, maxy REAL, date TEXT);
+""" + """
+-- The tables below are shared with OpenCPN (gui/src/seachart_db.cpp).
+-- Keep both sides in sync when changing them.
+CREATE TABLE IF NOT EXISTS harbours (
+    id INTEGER PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL,
+    lon REAL NOT NULL, lat REAL NOT NULL, osm_id TEXT UNIQUE,
+    source TEXT NOT NULL DEFAULT 'user', edited INTEGER NOT NULL DEFAULT 0,
+    notes TEXT NOT NULL DEFAULT '', depth REAL, berths INTEGER,
+    vhf TEXT NOT NULL DEFAULT '', phone TEXT NOT NULL DEFAULT '',
+    website TEXT NOT NULL DEFAULT '', facilities TEXT NOT NULL DEFAULT '',
+    rating INTEGER, updated TEXT);
+CREATE TABLE IF NOT EXISTS photos (
+    id INTEGER PRIMARY KEY, harbour_id INTEGER NOT NULL, path TEXT NOT NULL,
+    caption TEXT NOT NULL DEFAULT '', added TEXT);
+CREATE TABLE IF NOT EXISTS pois (
+    id INTEGER PRIMARY KEY, osm_id TEXT UNIQUE, category TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '', lon REAL NOT NULL, lat REAL NOT NULL,
+    tags TEXT NOT NULL DEFAULT '{}');
+CREATE INDEX IF NOT EXISTS pois_pos ON pois (lat, lon);
+CREATE TABLE IF NOT EXISTS weather (
+    lon REAL NOT NULL, lat REAL NOT NULL, time INTEGER NOT NULL,
+    wind_kn REAL, wind_dir REAL, gust_kn REAL, wave_m REAL, wave_dir REAL,
+    PRIMARY KEY (lon, lat, time));
+CREATE TABLE IF NOT EXISTS weather_meta (
+    lon REAL NOT NULL, lat REAL NOT NULL, fetched INTEGER NOT NULL,
+    PRIMARY KEY (lon, lat));
+CREATE TABLE IF NOT EXISTS navgrid (
+    id INTEGER PRIMARY KEY, lon0 REAL, lat0 REAL, dlon REAL, dlat REAL,
+    nx INTEGER, ny INTEGER, data BLOB, created TEXT);
 """
+
+
+def default_path():
+    """Shared location, also used by OpenCPN's passage planner:
+    <Documents>/seachart/seachart.db (override with SEACHART_DB)."""
+    if os.environ.get("SEACHART_DB"):
+        return os.environ["SEACHART_DB"]
+    home = os.path.expanduser("~")
+    docs = os.path.join(home, "Documents")
+    base = docs if os.path.isdir(docs) else home
+    return os.path.join(base, "seachart", "seachart.db")
 
 
 class Store:
     def __init__(self, path):
         self.path = path
+        folder = os.path.dirname(os.path.abspath(path))
+        os.makedirs(folder, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.executescript(SCHEMA)
         self.put_bounds = None      # extent of everything put since open
@@ -136,8 +183,8 @@ class Store:
     def mark_downloaded(self, source, bounds):
         self.db.execute("INSERT INTO downloads VALUES (?,?,?,?,?,?)",
                         (source,) + tuple(bounds) +
-                        (datetime.datetime.utcnow().isoformat(
-                            timespec="seconds"),))
+                        (datetime.datetime.now(datetime.timezone.utc)
+                         .isoformat(timespec="seconds"),))
         self.db.commit()
 
     def is_downloaded(self, source, bounds, eps=1e-9):

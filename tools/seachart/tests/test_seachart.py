@@ -389,3 +389,59 @@ class EndToEndTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HarbourGuideTest(unittest.TestCase):
+    def test_seed_edit_photo_guide_navgrid(self):
+        from seachart import guide, harbours, navgrid, pois, weather
+        with tempfile.TemporaryDirectory() as tmp:
+            db = os.path.join(tmp, "test.db")
+            fixture_store(db)
+            store = Store(db)
+            self.assertEqual(harbours.seed_from_osm(
+                store, (9.5, 54.0, 11.0, 55.0)), 1)
+            (h,) = harbours.query(store)
+            self.assertEqual((h["kind"], h["name"]), ("marina", "Testhafen"))
+            harbours.edit(store, h["id"], notes="Steg B", vhf="69",
+                          depth="2,8")
+            photo = os.path.join(tmp, "p.jpg")
+            with open(photo, "wb") as f:
+                f.write(b"\xff\xd8\xff\xd9")
+            harbours.add_photo(store, h["id"], photo, "Einfahrt")
+            aid = harbours.add(store, kind="anchorage", name="Bucht",
+                               lon=10.3, lat=54.45)
+            # a user edit survives a new seed
+            harbours.seed_from_osm(store, (9.5, 54.0, 11.0, 55.0))
+            h = {r["id"]: r for r in harbours.query(store)}
+            self.assertEqual(h[aid]["kind"], "anchorage")
+            (marina,) = [r for r in h.values() if r["kind"] == "marina"]
+            self.assertEqual((marina["notes"], marina["depth"]),
+                             ("Steg B", 2.8))
+            store.db.execute(
+                "INSERT INTO pois (osm_id, category, name, lon, lat) VALUES"
+                " ('node/9', 'restaurant', 'Fischbude', 10.186, 54.411)")
+            self.assertEqual(pois.near(store, marina["lon"], marina["lat"])
+                             [0][1]["name"], "Fischbude")
+            t0 = 1700000000
+            store.db.executemany(
+                "INSERT INTO weather VALUES (10.25, 54.5, ?, 12, 250, 18,"
+                " 0.6, 240)", [(t0 + 3600 * i,) for i in range(48)])
+            store.db.execute("INSERT INTO weather_meta VALUES"
+                             " (10.25, 54.5, ?)", (t0,))
+            self.assertEqual(weather.at(store, 10.2, 54.4, t0 + 7000)
+                             ["time"], t0 + 7200)
+            out = os.path.join(tmp, "out")
+            guide.write(store, out, (9.5, 54.0, 11.0, 55.0), "Test")
+            with open(os.path.join(out, "guide.html"), encoding="utf-8") \
+                    as f:
+                page = f.read()
+            for text in ("Testhafen", "Steg B", "Fischbude", "UKW-Kanal",
+                         "guide_photos/"):
+                self.assertIn(text, page)
+            grid = navgrid.build(store, (9.9, 54.2, 10.5, 54.6), 0.01)
+            # west of the coastline is land, the east is water
+            self.assertEqual(grid[20, 2], navgrid.LAND)
+            self.assertGreater(grid[20, 55], 0)
+            harbours.remove(store, marina["id"])
+            self.assertEqual(len(harbours.query(store)), 1)
+            store.close()
