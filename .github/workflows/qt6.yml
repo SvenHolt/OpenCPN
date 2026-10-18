@@ -1,0 +1,41 @@
+---
+# Build and test the Qt6 frontend (qt/), independent of the wxWidgets build.
+name: Qt6 frontend
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'qt/**'
+      - 'data/basemap_shp/**'
+      - '.github/workflows/qt6.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'qt/**'
+      - 'data/basemap_shp/**'
+      - '.github/workflows/qt6.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt6
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev qt6-svg-dev libqt6serialport6-dev libgl-dev
+
+      - name: Configure
+        run: cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build-qt --parallel
+
+      - name: Test
+        working-directory: build-qt
+        run: ctest --output-on-failure
