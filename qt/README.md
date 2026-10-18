@@ -26,6 +26,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![ENC](doc/screenshot-enc.png) | ![Wetter](doc/screenshot-weather.png) |
 | **Gezeiten · Tag** | **Aktive Route · Nacht** |
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
+| **Routenplanung von Hafen zu Hafen** | |
+| ![Routenplanung](doc/screenshot-route-planning.png) | |
 | **Kartenausschnitt für Offline-Daten wählen** | **Offline-Gebiete · lokale Overpass-Instanz** |
 | ![Auswahl](doc/screenshot-offline-select.png) | ![Offline](doc/screenshot-offline.png) |
 
@@ -50,6 +52,7 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | NMEA 0183: RMC, GGA, GLL, VTG, HDT, THS inkl. Checksumme | ✅ |
 | AIS: Typen 1/2/3, 5, 18, 19, 24; CPA/TCPA und Kollisionsalarm | ✅ |
 | Datenquellen: UDP, TCP, seriell, Simulator; Datenmonitor | ✅ |
+| **Routenplanung von Hafen zu Hafen** (automatisch über Wasser, Land und Molen werden umfahren) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
 | GPX-Import/-Export (auch OpenCPN `navobj.xml`) | ✅ |
 | S-63 (verschlüsselte ENC), CM93 | ❌ siehe Grenzen |
@@ -157,6 +160,39 @@ berechnet.
 * **„Windvorhersage laden“** holt NOAA GFS 0,25° (Wind 10 m, Böen,
   Bodendruck, 0–72 h in 3-Stunden-Schritten) direkt von NOMADS für den
   sichtbaren Kartenausschnitt.
+
+### Routenplanung von Hafen zu Hafen
+
+Oben auf der Seite **Routen**:
+
+1. **Start** und **Ziel** eingeben. Vorgeschlagen werden die eigene
+   Position, Markierungen und, aus den Offline-Gebieten, Marinas, Häfen,
+   Ankerplätze und Orte. Alternativ per Rechtsklick auf die Karte
+   „Route von hier“ bzw. „Route hierher“ wählen.
+2. **Route planen**: Die App berechnet den kürzesten Weg über Wasser und
+   zeigt ihn gestrichelt als Vorschau, mit Distanz, Fahrzeit bei der
+   eingestellten Geschwindigkeit und Anzahl der Wegpunkte.
+3. **Speichern** oder **Speichern und navigieren**. Die Wegpunkte heißen
+   wie Start und Ziel, dazwischen WP01, WP02 …
+
+So rechnet der Planer:
+
+* Das Gebiet um Start und Ziel wird als Raster erfasst (bis 700 Zellen je
+  Seite, mindestens etwa 20 m pro Zelle).
+* Land kommt aus der Basiskarte. In Offline-Gebieten stammen die
+  Küstenlinie (`natural=coastline`, Land liegt links) und Molen/Buhnen aus
+  der lokalen Overpass-Instanz. Sie sind viel genauer, und dort wird die
+  Basiskarte ignoriert.
+* A* sucht mit Abstand zum Ufer. Danach wird der Weg auf die nötigen
+  Wendepunkte begradigt.
+* Liegen Start oder Ziel an Land (z. B. die Mitte einer Marina), wird die
+  nächste erreichbare Wasserfläche gewählt.
+
+Tiefen, Fahrwasser, Sperrgebiete und Brücken werden dabei **nicht**
+berücksichtigt. Die Route ist ein Vorschlag und muss vor der Fahrt auf der
+Seekarte geprüft werden.
+
+Passen nicht alle Bereiche ins Dock, landen die hinteren unter **Mehr**.
 
 ### Offline-Gebiete und lokale Overpass-Instanz
 
@@ -337,6 +373,7 @@ qt/
 │   ├── GpxIO, TrackRecorder
 │   ├── Tides              harmonische Gezeitenvorhersage
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
+│   ├── RoutePlanner       Routing über Wasser (Raster, A*, Begradigung)
 │   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
 ├── src/ui/                Widgets (libocpnqt_ui.so)
@@ -346,6 +383,7 @@ qt/
 │   ├── Overlays, SideDrawer, DrawerPages
 │   ├── TracksPage, TidesPage, WeatherPage
 │   ├── OfflinePage        Gebietsauswahl-Leiste, Offline-Seite, OSM-Ebene
+│   ├── RoutePlanPanel     Routenplanung von Hafen zu Hafen
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

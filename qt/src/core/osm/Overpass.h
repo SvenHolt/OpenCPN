@@ -13,6 +13,7 @@
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QObject>
+#include <QPointF>
 #include <QPointer>
 #include <QProcess>
 #include <QQueue>
@@ -51,6 +52,7 @@ struct OsmElement {
   qint64 id = 0;
   double lat = 0, lon = 0;
   QHash<QString, QString> tags;
+  QVector<QPointF> geometry;  // x = lon, y = lat ("out geom")
   QString name() const { return tags.value("name"); }
 };
 

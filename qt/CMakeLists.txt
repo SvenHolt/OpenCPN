@@ -75,6 +75,7 @@ set(OCPN_QT_CORE_SOURCES
   src/core/Tides.cpp
   src/core/Grib.cpp
   src/core/GribDownload.cpp
+  src/core/RoutePlanner.cpp
   src/core/charts/Chart.cpp
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
@@ -113,6 +114,7 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/TracksPage.cpp
   src/ui/TidesPage.cpp
   src/ui/OfflinePage.cpp
+  src/ui/RoutePlanPanel.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp

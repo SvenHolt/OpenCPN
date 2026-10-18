@@ -31,6 +31,7 @@
 #include "ui/ChartView.h"
 #include "ui/GlassPanel.h"
 #include "ui/Icons.h"
+#include "ui/RoutePlanPanel.h"
 #include "ui/Overlays.h"
 #include "ui/PluginManager.h"
 #include "ui/Theme.h"
@@ -178,20 +179,25 @@ void ListPage::setEmptyText(const QString& text) { m_empty->setText(text); }
 
 RoutesPage::RoutesPage(ChartView* chart, QWidget* parent)
     : ListPage(parent), m_chart(chart) {
-  auto* add = button(tr("New route"), "plus", "primary");
-  connect(add, &QPushButton::clicked, this, &RoutesPage::newRouteRequested);
-  actions()->addWidget(add);
+  m_planner = new RoutePlanPanel(chart);
+  actions()->addWidget(m_planner);
   auto* io = new QHBoxLayout;
-  auto* imp = button(tr("Import GPX"), "import");
-  auto* exp = button(tr("Export GPX"), "export");
+  auto* add = button(tr("Draw"), "edit");
+  add->setToolTip(tr("Draw a route by tapping points on the chart"));
+  connect(add, &QPushButton::clicked, this, &RoutesPage::newRouteRequested);
+  auto* imp = button(tr("Import"), "import");
+  auto* exp = button(tr("Export"), "export");
+  imp->setToolTip(tr("Import GPX"));
+  exp->setToolTip(tr("Export GPX"));
   connect(imp, &QPushButton::clicked, this, &RoutesPage::importGpx);
   connect(exp, &QPushButton::clicked, this, &RoutesPage::exportGpx);
+  io->addWidget(add);
   io->addWidget(imp);
   io->addWidget(exp);
   actions()->addLayout(io);
   setEmptyText(
-      tr("No routes yet.\nCreate one by tapping points on the "
-         "chart, or import a GPX file."));
+      tr("No routes yet.\nPlan one from harbour to harbour above, draw it "
+         "on the chart or import a GPX file."));
 
   auto& store = NavStore::instance();
   connect(&store, &NavStore::routesChanged, this, &RoutesPage::rebuild);

@@ -658,9 +658,18 @@ QVector<OsmElement> OverpassService::parseJson(const QByteArray& json,
     OsmElement e;
     e.type = o.value("type").toString();
     e.id = qint64(o.value("id").toDouble());
+    // "out geom": the coordinates of a way.
+    for (const auto& g : o.value("geometry").toArray()) {
+      const QJsonObject c = g.toObject();
+      e.geometry << QPointF(c.value("lon").toDouble(),
+                            c.value("lat").toDouble());
+    }
     if (o.contains("lat")) {
       e.lat = o.value("lat").toDouble();
       e.lon = o.value("lon").toDouble();
+    } else if (!e.geometry.isEmpty()) {
+      e.lat = e.geometry.first().y();
+      e.lon = e.geometry.first().x();
     } else if (o.contains("center")) {
       const QJsonObject c = o.value("center").toObject();
       e.lat = c.value("lat").toDouble();

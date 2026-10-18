@@ -1,4 +1,5 @@
 // Smoke tests for the opencpn-qt user interface (run offscreen).
+#include <QPushButton>
 #include <QtTest>
 
 #include "core/AppSettings.h"
@@ -9,6 +10,7 @@
 #include "ui/ChartView.h"
 #include "ui/MainWindow.h"
 #include "ui/OfflinePage.h"
+#include "ui/RoutePlanPanel.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
 #include "core/Nmea.h"
@@ -126,6 +128,34 @@ private slots:
     if (!shot.isEmpty()) m_win->grab().save(shot);
     chart->finishAreaSelect();
     QCOMPARE(chart->mode(), ChartView::Mode::Browse);
+  }
+
+  void planHarbourToHarbour() {
+    auto* panel = m_win->findChild<RoutePlanPanel*>();
+    QVERIFY(panel);
+    QPushButton* plan = nullptr;
+    QPushButton* save = nullptr;
+    for (auto* b : panel->findChildren<QPushButton*>()) {
+      if (b->text() == "Plan route") plan = b;
+      if (b->text() == "Save and navigate") save = b;
+    }
+    QVERIFY(plan && save);
+    QVERIFY(!plan->isEnabled());
+    panel->setFrom(Place{"Kiel", "harbour", 54.33, 10.15, true});
+    panel->setTo(Place{"Laboe", "harbour", 54.41, 10.22, true});
+    QVERIFY(plan->isEnabled());
+    const int before = int(NavStore::instance().routes().size());
+    plan->click();
+    QVERIFY(QTest::qWaitFor(
+        [save] { return !save->parentWidget()->isHidden(); }, 20000));
+    save->click();
+    QCOMPARE(int(NavStore::instance().routes().size()), before + 1);
+    const Route& r = NavStore::instance().routes().last();
+    QCOMPARE(r.name, QStringLiteral("Kiel → Laboe"));
+    QCOMPARE(r.points.first().name, QStringLiteral("Kiel"));
+    QCOMPARE(r.points.last().name, QStringLiteral("Laboe"));
+    QCOMPARE(NavStore::instance().activeRouteId(), r.id);
+    NavStore::instance().stopNavigation();
   }
 
   void poiClassification() {

@@ -2,9 +2,11 @@
 
 #include <QDateTime>
 #include <QHBoxLayout>
+#include <QMenu>
 #include <QPainter>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <cmath>
 
 #include "core/AppSettings.h"
@@ -287,6 +289,24 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   m_sectionLayout = new QHBoxLayout;
   m_sectionLayout->setSpacing(4);
   l->addLayout(m_sectionLayout);
+  m_more = new DockButton("more", tr("More"), this);
+  m_more->setCheckable(true);
+  m_more->setMinimumWidth(60);
+  m_more->hide();
+  connect(m_more, &QAbstractButton::clicked, this, [this] {
+    m_more->setChecked(m_active >= 0 && !m_buttons[m_active]->isVisible());
+    QMenu menu(this);
+    for (int i = 0; i < m_buttons.size(); ++i) {
+      if (m_buttons[i]->isVisible()) continue;
+      QAction* a = menu.addAction(Icons::icon(m_icons[i], Theme::p().text, 18),
+                                  m_labels[i]);
+      connect(a, &QAction::triggered, this,
+              [this, i] { emit sectionRequested(i); });
+    }
+    const QSize hint = menu.sizeHint();
+    menu.exec(m_more->mapToGlobal(QPoint(0, -hint.height())));
+  });
+  l->addWidget(m_more);
   l->addStretch(1);
 
   m_status = new QLabel(this);
@@ -328,6 +348,9 @@ int BottomDock::addSection(const QString& icon, const QString& label) {
           [this, index] { emit sectionRequested(index); });
   m_sectionLayout->addWidget(b);
   m_buttons << b;
+  m_icons << icon;
+  m_labels << label;
+  fitSections();
   return index;
 }
 
@@ -336,12 +359,30 @@ void BottomDock::setActiveView(int view) {
 }
 
 void BottomDock::setActiveSection(int s) {
+  m_active = s;
   for (int i = 0; i < m_buttons.size(); ++i) m_buttons[i]->setChecked(i == s);
+  m_more->setChecked(s >= 0 && s < m_buttons.size() &&
+                     !m_buttons[s]->isVisible());
 }
 
 void BottomDock::resizeEvent(QResizeEvent*) {
   // The source summary is the first thing to go on narrow screens.
   m_status->setVisible(width() >= 1700);
+  fitSections();
+}
+
+void BottomDock::fitSections() {
+  // Fixed parts: margins, MOB, the two view buttons, night mode, clock.
+  constexpr int kButton = 64;  // section button incl. spacing
+  int fixed = 14 + 18 + 4 * 82 + 78 + 10 + 40;
+  if (!m_status->isHidden()) fixed += m_status->sizeHint().width() + 18;
+  const int available = width() - fixed;
+  const int n = int(m_buttons.size());
+  int shown = std::clamp(available / kButton, 0, n);
+  if (shown < n) shown = std::max(0, (available - kButton) / kButton);
+  for (int i = 0; i < n; ++i) m_buttons[i]->setVisible(i < shown);
+  m_more->setVisible(shown < n);
+  setActiveSection(m_active);
 }
 
 void BottomDock::updateStatus() {

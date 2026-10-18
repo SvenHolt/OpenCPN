@@ -75,7 +75,12 @@ protected:
 private:
   void updateStatus();
   void resizeEvent(QResizeEvent*) override;
+  /** Hides the sections that do not fit behind a "More" button. */
+  void fitSections();
   QVector<DockButton*> m_buttons;
+  QStringList m_icons, m_labels;
+  DockButton* m_more;
+  int m_active = -1;
   DockButton* m_views[2];
   class QHBoxLayout* m_sectionLayout;
   DockButton* m_theme;

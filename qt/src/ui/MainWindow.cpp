@@ -13,6 +13,7 @@
 #include "ui/SailPage.h"
 #include "ui/Icons.h"
 #include "ui/OfflinePage.h"
+#include "ui/RoutePlanPanel.h"
 #include "ui/Overlays.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
@@ -48,14 +49,9 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_instrumentsAnim.setEasingCurve(QEasingCurve::OutCubic);
 
   auto* routes = new RoutesPage(m_chart);
+  m_routes = routes;
   auto* ais = new AisPage(m_chart);
   addSection("chart", tr("Charts"), new ChartsPage(m_chart));
-  auto* poi = new OsmPoiLayer(m_chart, this);
-  m_chart->addLayer(poi);
-  auto* offline = new OfflinePage(m_chart, poi);
-  m_offlineSection = addSection("download", tr("Offline"), offline);
-  connect(offline, &OfflinePage::selectAreaRequested, this,
-          &MainWindow::beginAreaSelect);
   m_routesSection = addSection("route", tr("Routes"), routes);
   addSection("pin", tr("Marks"), new MarksPage(m_chart));
   addSection("flag", tr("Tracks"), new TracksPage(m_chart));
@@ -65,6 +61,12 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_chart->addLayer(new TideLayer(this));
   addSection("wind", tr("Weather"), new WeatherPage(m_chart));
   m_chart->addLayer(new GribLayer(this));
+  auto* poi = new OsmPoiLayer(m_chart, this);
+  m_chart->addLayer(poi);
+  auto* offline = new OfflinePage(m_chart, poi);
+  m_offlineSection = addSection("download", tr("Offline"), offline);
+  connect(offline, &OfflinePage::selectAreaRequested, this,
+          &MainWindow::beginAreaSelect);
   auto* timeBar = new WeatherTimeBar;
   timeBar->setProperty("chartOnly", true);
   addOverlay(timeBar, Qt::BottomLeftCorner);
@@ -306,7 +308,20 @@ void MainWindow::showContextMenu(double lat, double lon, const QPoint& global) {
   menu.addAction(Icons::icon("locate", pal.text, 18), tr("Center chart here"),
                  [this, lat, lon] { m_chart->centerOn(lat, lon); });
   menu.addSeparator();
-  menu.addAction(Icons::icon("route", pal.text, 18), tr("New route…"), this,
+  const Place here{
+      tr("Position %1° %2°").arg(lat, 0, 'f', 4).arg(lon, 0, 'f', 4),
+      "position", lat, lon, true};
+  menu.addAction(Icons::icon("locate", pal.text, 18), tr("Route from here"),
+                 this, [this, here] {
+                   m_drawer->open(m_routesSection);
+                   m_routes->planner()->setFrom(here);
+                 });
+  menu.addAction(Icons::icon("flag", pal.text, 18), tr("Route to here"), this,
+                 [this, here] {
+                   m_drawer->open(m_routesSection);
+                   m_routes->planner()->setTo(here);
+                 });
+  menu.addAction(Icons::icon("route", pal.text, 18), tr("Draw route…"), this,
                  &MainWindow::beginRouteCreate);
   menu.addAction(Icons::icon("download", pal.text, 18),
                  tr("Save area offline…"), this, [this, lat, lon] {

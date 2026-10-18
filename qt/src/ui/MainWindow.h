@@ -19,6 +19,7 @@ class AreaSelectBar;
 class TargetCard;
 class SideDrawer;
 class CockpitView;
+class RoutesPage;
 
 class MainWindow : public QWidget, public PluginHost {
   Q_OBJECT
@@ -73,6 +74,7 @@ private:
   QPropertyAnimation m_instrumentsAnim;
   QVector<QPair<QWidget*, Qt::Corner>> m_overlays;
   int m_routesSection = -1;
+  RoutesPage* m_routes = nullptr;
   int m_sailSection = -1;
   int m_offlineSection = -1;
   CockpitView* m_cockpit;

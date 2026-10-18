@@ -4,6 +4,8 @@
 #include <QSignalSpy>
 #include <QtTest>
 
+#include "core/GeoMath.h"
+#include "core/RoutePlanner.h"
 #include "core/osm/OsmMerge.h"
 #include "core/osm/Overpass.h"
 
@@ -132,6 +134,91 @@ private slots:
     QCOMPARE(e[1].lat, 54.3);
     QVERIFY(OverpassService::parseJson("not json", &err).isEmpty());
     QVERIFY(!err.isEmpty());
+  }
+
+  void plannerOpenWater() {
+    RoutePlanRequest req{54.40, 10.20, 54.50, 10.40};
+    const RoutePlanResult r = RoutePlanner::plan(req);
+    QVERIFY2(r.ok(), qPrintable(r.error));
+    // Nothing in the way: a straight line.
+    QCOMPARE(r.points.size(), 2);
+    QVERIFY(std::fabs(r.lengthNm -
+                      geo::distanceNm(54.40, 10.20, 54.50, 10.40)) < 1e-6);
+  }
+
+  void plannerAvoidsIsland() {
+    // A square island between start and destination.
+    QVector<MercatorPolygon> land(1);
+    const QPointF nw = geo::toMercator(54.48, 10.28),
+                  se = geo::toMercator(54.42, 10.32);
+    land[0].path.addRect(QRectF(nw, se));
+    land[0].bounds = QRectF(nw, se);
+    RoutePlanRequest req{54.45, 10.20, 54.45, 10.40};
+    req.land = &land;
+    const RoutePlanResult r = RoutePlanner::plan(req);
+    QVERIFY2(r.ok(), qPrintable(r.error));
+    QVERIFY(r.points.size() >= 3);
+    QVERIFY(r.lengthNm > geo::distanceNm(54.45, 10.20, 54.45, 10.40));
+    // No leg crosses the island.
+    for (int i = 1; i < r.points.size(); ++i)
+      for (double t = 0; t <= 1; t += 0.01) {
+        const QPointF p = r.points[i - 1] + (r.points[i] - r.points[i - 1]) * t;
+        QVERIFY(!(p.y() < 54.48 && p.y() > 54.42 && p.x() > 10.28 &&
+                  p.x() < 10.32));
+      }
+    // Points on land are snapped to the nearest water.
+    RoutePlanRequest onLand{54.45, 10.30, 54.45, 10.40};
+    onLand.land = &land;
+    QVERIFY(RoutePlanner::plan(onLand).ok());
+  }
+
+  void plannerUsesCoastlineSide() {
+    // A closed OSM coastline around an island (counter clockwise, land on
+    // the left) blocks its inside although no land polygon exists.
+    QPolygonF island;
+    for (const auto& [lat, lon] :
+         std::initializer_list<std::pair<double, double>>{{54.48, 10.28},
+                                                          {54.42, 10.28},
+                                                          {54.42, 10.32},
+                                                          {54.48, 10.32},
+                                                          {54.48, 10.28}})
+      island << geo::toMercator(lat, lon);
+    RoutePlanRequest req{54.45, 10.20, 54.45, 10.40};
+    req.coastlines << island;
+    const RoutePlanResult r = RoutePlanner::plan(req);
+    QVERIFY2(r.ok(), qPrintable(r.error));
+    QVERIFY(r.points.size() >= 3);
+    // A breakwater (plain barrier) cannot be crossed either.
+    RoutePlanRequest wall{54.45, 10.20, 54.45, 10.40};
+    wall.barriers << QPolygonF{geo::toMercator(54.47, 10.30),
+                               geo::toMercator(54.43, 10.30)};
+    const RoutePlanResult w = RoutePlanner::plan(wall);
+    QVERIFY(w.ok());
+    QVERIFY(w.points.size() >= 3);
+    // A harbour basin with its entrance on the east side: the route must
+    // enter through the entrance, not across the walls.
+    RoutePlanRequest basin{54.45, 10.20, 54.45, 10.30};
+    QPolygonF walls;
+    for (const auto& [lat, lon] :
+         std::initializer_list<std::pair<double, double>>{{54.455, 10.31},
+                                                          {54.46, 10.31},
+                                                          {54.46, 10.29},
+                                                          {54.44, 10.29},
+                                                          {54.44, 10.31},
+                                                          {54.445, 10.31}})
+      walls << geo::toMercator(lat, lon);
+    basin.barriers << walls;
+    const RoutePlanResult h = RoutePlanner::plan(basin);
+    QVERIFY2(h.ok(), qPrintable(h.error));
+    QVERIFY(h.lengthNm > 1.2 * geo::distanceNm(54.45, 10.20, 54.45, 10.30));
+    for (int i = 1; i < h.points.size(); ++i) {
+      const QLineF leg(
+          geo::toMercator(h.points[i - 1].y(), h.points[i - 1].x()),
+          geo::toMercator(h.points[i].y(), h.points[i].x()));
+      for (int k = 1; k < walls.size(); ++k)
+        QVERIFY(leg.intersects(QLineF(walls[k - 1], walls[k]), nullptr) !=
+                QLineF::BoundedIntersection);
+    }
   }
 
   void localImportAndQuery() {

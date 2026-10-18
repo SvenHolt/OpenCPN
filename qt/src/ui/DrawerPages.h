@@ -11,6 +11,7 @@ class QLabel;
 class QSpinBox;
 class QVBoxLayout;
 class QStackedWidget;
+class RoutePlanPanel;
 
 /** Hoverable, clickable rounded row used by all lists. */
 class ListRow : public QWidget {
@@ -57,6 +58,7 @@ class RoutesPage : public ListPage {
   Q_OBJECT
 public:
   explicit RoutesPage(ChartView* chart, QWidget* parent = nullptr);
+  RoutePlanPanel* planner() const { return m_planner; }
 
 signals:
   void newRouteRequested();
@@ -66,6 +68,7 @@ private:
   void importGpx();
   void exportGpx();
   ChartView* m_chart;
+  RoutePlanPanel* m_planner;
 };
 
 class MarksPage : public ListPage {

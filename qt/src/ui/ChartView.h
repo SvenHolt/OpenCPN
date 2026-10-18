@@ -37,6 +37,7 @@ public:
   ~ChartView() override;
 
   void setLandData(std::shared_ptr<const LandData> land);
+  std::shared_ptr<const LandData> landData() const { return m_land; }
 
   // View state ------------------------------------------------------------
   void centerOn(double lat, double lon, bool animated = true);
