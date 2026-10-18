@@ -27,6 +27,7 @@ void AppSettings::load() {
   deepDepth = s.value("deepDepth", deepDepth).toDouble();
   showChartOutlines = s.value("showChartOutlines", showChartOutlines).toBool();
   trackRecording = s.value("trackRecording", trackRecording).toBool();
+  startInCockpit = s.value("startInCockpit", startInCockpit).toBool();
   s.endGroup();
 }
 
@@ -48,6 +49,7 @@ void AppSettings::save() {
   s.setValue("deepDepth", deepDepth);
   s.setValue("showChartOutlines", showChartOutlines);
   s.setValue("trackRecording", trackRecording);
+  s.setValue("startInCockpit", startInCockpit);
   s.endGroup();
 }
 

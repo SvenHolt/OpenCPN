@@ -121,6 +121,69 @@ bool NmeaParser::parseLine(const QString& raw) {
     u.sog = optDouble(f[5]);
   } else if ((type == "HDT" || type == "THS") && f.size() >= 2) {
     u.hdg = optDouble(f[1]);
+  } else if (type == "MWV" && f.size() >= 5) {
+    // Wind relative to the bow: R = apparent, T = theoretical (true)
+    if (f.size() >= 6 && f[5] != "A") return false;
+    auto angle = optDouble(f[1]);
+    auto speed = optDouble(f[3]);
+    if (!angle || !speed) return false;
+    double a = *angle > 180 ? *angle - 360 : *angle;
+    double kn = *speed;
+    if (f[4] == "K")
+      kn /= 1.852;
+    else if (f[4] == "M")
+      kn *= 1.943844;
+    else if (f[4] == "S")
+      kn *= 0.868976;
+    if (f[2] == "R") {
+      u.awa = a;
+      u.aws = kn;
+    } else {
+      u.twa = a;
+      u.tws = kn;
+    }
+  } else if (type == "MWD" && f.size() >= 6) {
+    u.twd = optDouble(f[1]);
+    u.tws = optDouble(f[5]);
+    if (!u.tws && f.size() >= 8) {
+      if (auto ms = optDouble(f[7])) u.tws = *ms * 1.943844;
+    }
+  } else if (type == "VHW" && f.size() >= 6) {
+    u.stw = optDouble(f[5]);
+    if (!u.stw && f.size() >= 8)
+      if (auto kmh = optDouble(f[7])) u.stw = *kmh / 1.852;
+  } else if (type == "DPT" && f.size() >= 2) {
+    u.depth = optDouble(f[1]);
+    if (u.depth && f.size() >= 3)
+      if (auto off = optDouble(f[2]); off && *off > 0) *u.depth += *off;
+  } else if (type == "DBT" && f.size() >= 5) {
+    u.depth = optDouble(f[3]);
+  } else if (type == "RPM" && f.size() >= 4) {
+    if (f[1] != "E") return false;  // shaft RPM is not engine RPM
+    u.rpm = optDouble(f[3]);
+  } else if (type == "XDR" && f.size() >= 5) {
+    // Quadruples: type, value, unit, name
+    for (int i = 1; i + 2 < f.size(); i += 4) {
+      const QString t = f[i];
+      const auto v = optDouble(f[i + 1]);
+      const QString unit = f[i + 2];
+      const QString name = i + 3 < f.size() ? f[i + 3].toUpper() : QString();
+      if (!v) continue;
+      if (t == "C" && (name.contains("ENG") || name.contains("COOL")))
+        u.coolantC = unit == "K" ? *v - 273.15 : *v;
+      else if (t == "P" && name.contains("OIL"))
+        u.oilBar = unit == "P" ? *v / 1e5 : *v;
+      else if (t == "V" && name.contains("FUEL"))
+        u.fuelPct = *v;
+      else if (t == "U" && (name.contains("BAT") || name.contains("ALT")))
+        u.voltage = *v;
+      else if (t == "G" && name.contains("HOUR"))
+        u.engineHours = *v;
+      else if (t == "T" && name.contains("ENG"))
+        u.rpm = *v;
+      else if (t == "E" && name.contains("FUELRATE"))
+        u.fuelRateLph = *v;
+    }
   } else {
     return false;
   }

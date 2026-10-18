@@ -263,6 +263,7 @@ void ChartView::setScale(double s) {
 }
 
 void ChartView::centerOn(double lat, double lon, bool animated) {
+  emit navigationRequested();
   setFollow(false);
   const QPointF c = geo::toMercator(lat, lon);
   if (animated)
@@ -283,6 +284,7 @@ void ChartView::zoomBy(double factor, bool animated) {
 
 void ChartView::fitGeoBounds(double lat1, double lon1, double lat2,
                              double lon2) {
+  emit navigationRequested();
   setFollow(false);
   const QRectF r =
       QRectF(geo::toMercator(lat1, lon1), geo::toMercator(lat2, lon2))

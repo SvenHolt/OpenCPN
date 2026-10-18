@@ -73,6 +73,12 @@ const QHash<QString, QString>& bodies() {
        R"(<path d="M5 5v14l10-7z" fill="currentColor"/><path d="M18 5v14" stroke-width="2.4"/>)"},
       {"prev",
        R"(<path d="M19 5v14L9 12z" fill="currentColor"/><path d="M6 5v14" stroke-width="2.4"/>)"},
+      {"sail",
+       R"(<path d="M11 3v15"/><path d="M11 4c4 3 7 8 7 13h-7"/><path d="M9 6c-2.5 3-4 7-4 11h4"/><path d="M3 20.5c3 1.2 15 1.2 18 0"/>)"},
+      {"engine",
+       R"(<path d="M4 10h3l2-2h5l2 2h2v2h2v5h-2v2h-3l-2 2H8l-1-2H4z"/><path d="M8 5h6M11 5v3"/>)"},
+      {"gauge",
+       R"(<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>)"},
       {"edit",
        R"(<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>)"},
   };

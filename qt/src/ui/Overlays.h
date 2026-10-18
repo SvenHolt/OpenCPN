@@ -59,11 +59,14 @@ public:
   explicit BottomDock(QWidget* parent = nullptr);
   /** Adds a section button; returns its index (== drawer page index). */
   int addSection(const QString& icon, const QString& label);
+  /** 0 = cockpit, 1 = chart */
+  void setActiveView(int view);
   void setActiveSection(int s);
   static constexpr int kHeight = 76;
 
 signals:
   void sectionRequested(int section);
+  void viewRequested(int view);
   void mobRequested();
 
 protected:
@@ -73,6 +76,7 @@ private:
   void updateStatus();
   void resizeEvent(QResizeEvent*) override;
   QVector<DockButton*> m_buttons;
+  DockButton* m_views[2];
   class QHBoxLayout* m_sectionLayout;
   DockButton* m_theme;
   QLabel* m_clock;

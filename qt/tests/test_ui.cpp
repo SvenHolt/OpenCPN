@@ -2,6 +2,7 @@
 #include <QtTest>
 
 #include "core/AppSettings.h"
+#include "core/BoatConfig.h"
 #include "core/GeoMath.h"
 #include "core/NavStore.h"
 #include "core/Shapefile.h"
@@ -9,6 +10,7 @@
 #include "ui/MainWindow.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
+#include "core/Nmea.h"
 
 class UiTest : public QObject {
   Q_OBJECT
@@ -81,6 +83,64 @@ private slots:
       QTest::qWait(30);
     }
     QVERIFY(m_win->chart()->rotation() > 5);
+  }
+
+  void cockpitWithEngine() {
+    // Wind and engine data as an NMEA source would deliver them.
+    NmeaParser parser;
+    connect(&parser, &NmeaParser::navUpdate, &NavStore::instance(),
+            &NavStore::applyNavUpdate);
+    for (const char* s :
+         {"WIMWV,320.0,R,18.5,N,A", "VWVHW,,T,,M,6.1,N,11.3,K",
+          "SDDPT,12.4,0.5", "ERRPM,E,1,2350,,A",
+          "ERXDR,C,84.0,C,ENGINE#0,P,3.6,B,ENGOIL#0,V,63,P,FUEL#0,U,14.1,V,"
+          "BATTERY#0,G,1250.4,H,ENGINEHOURS#0"})
+      QVERIFY(parser.parseLine(NmeaParser::makeSentence(s)));
+    const auto& env = NavStore::instance().environment();
+    QVERIFY(env.hasWind());
+    QCOMPARE(env.awa, -40.0);
+    QCOMPARE(env.aws, 18.5);
+    QCOMPARE(env.stw, 6.1);
+    QCOMPARE(env.depth, 12.9);
+    // True wind derived from apparent wind and STW, from further aft.
+    QVERIFY(env.tws < 18.5 && env.tws > 10);
+    QVERIFY(env.twa < -40 && env.twa > -90);
+    const auto& eng = NavStore::instance().engine();
+    QVERIFY(eng.running());
+    QCOMPARE(eng.rpm, 2350.0);
+    QCOMPARE(eng.coolantC, 84.0);
+    QCOMPARE(eng.oilBar, 3.6);
+    QCOMPARE(eng.fuelPct, 63.0);
+    QCOMPARE(eng.voltage, 14.1);
+
+    SailConfig s;
+    s.propulsion = SailConfig::Propulsion::MotorSailing;
+    s.main = SailConfig::Main::Reef1;
+    s.head = SailConfig::Head::Genoa;
+    s.headFurlPct = 70;
+    BoatConfig::instance().setSails(s);
+    QCOMPARE(BoatConfig::instance().sails().summary(),
+             QString("Main 1st reef · Genoa 70% · Engine"));
+    m_win->setView(MainWindow::View::Cockpit);
+    QTest::qWait(600);
+    const QString shot = qEnvironmentVariable("OCPN_QT_TEST_COCKPIT_SHOT");
+    if (!shot.isEmpty()) m_win->grab().save(shot);
+
+    // Running downwind under spinnaker with the engine off: the engine
+    // panel disappears.
+    QVERIFY(parser.parseLine(NmeaParser::makeSentence("ERRPM,E,1,0,,A")));
+    QVERIFY(
+        parser.parseLine(NmeaParser::makeSentence("WIMWV,150.0,R,11.0,N,A")));
+    QVERIFY(!NavStore::instance().engine().running());
+    s = SailConfig();
+    s.main = SailConfig::Main::Full;
+    s.head = SailConfig::Head::None;
+    s.downwind = SailConfig::Downwind::Spinnaker;
+    BoatConfig::instance().setSails(s);
+    QTest::qWait(1500);
+    const QString shot2 = qEnvironmentVariable("OCPN_QT_TEST_COCKPIT_SHOT2");
+    if (!shot2.isEmpty()) m_win->grab().save(shot2);
+    m_win->setView(MainWindow::View::Chart);
   }
 
   void drawerAndMob() {

@@ -244,6 +244,12 @@ QPushButton:disabled { color: @faint; }
 QPushButton[role="primary"] { background: @accent; color: white; }
 QPushButton[role="primary"]:hover { background: @accentBright; }
 QPushButton[role="danger"] { background: @danger; color: white; }
+QPushButton[role="segment"] { padding: 8px 6px; font-size: 13px; border-radius: 10px; }
+QPushButton[role="segment"]:checked { background: @accent; color: white; }
+QSlider::groove:horizontal { height: 6px; background: @pressed; border-radius: 3px; }
+QSlider::sub-page:horizontal { background: @accent; border-radius: 3px; }
+QSlider::handle:horizontal { background: white; width: 20px; height: 20px;
+  margin: -7px 0; border-radius: 10px; }
 QPushButton[role="ghost"] { background: transparent; color: @dim; padding: 8px 10px; }
 QPushButton[role="ghost"]:hover { background: @hover; color: @text; }
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {

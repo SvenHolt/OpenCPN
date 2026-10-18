@@ -271,6 +271,17 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   mob->setToolTip(tr("Man overboard"));
   connect(mob, &QAbstractButton::clicked, this, &BottomDock::mobRequested);
   l->addWidget(mob);
+  l->addSpacing(10);
+  const char* viewIcons[2] = {"gauge", "chart"};
+  const QString viewNames[2] = {tr("Cockpit"), tr("Chart")};
+  for (int i = 0; i < 2; ++i) {
+    m_views[i] = new DockButton(viewIcons[i], viewNames[i], this);
+    m_views[i]->setCheckable(true);
+    m_views[i]->setMinimumWidth(72);
+    connect(m_views[i], &QAbstractButton::clicked, this,
+            [this, i] { emit viewRequested(i); });
+    l->addWidget(m_views[i]);
+  }
   l->addStretch(1);
 
   m_sectionLayout = new QHBoxLayout;
@@ -312,12 +323,16 @@ int BottomDock::addSection(const QString& icon, const QString& label) {
   const int index = int(m_buttons.size());
   auto* b = new DockButton(icon, label, this);
   b->setCheckable(true);
-  b->setMinimumWidth(72);
+  b->setMinimumWidth(60);
   connect(b, &QAbstractButton::clicked, this,
           [this, index] { emit sectionRequested(index); });
   m_sectionLayout->addWidget(b);
   m_buttons << b;
   return index;
+}
+
+void BottomDock::setActiveView(int view) {
+  for (int i = 0; i < 2; ++i) m_views[i]->setChecked(i == view);
 }
 
 void BottomDock::setActiveSection(int s) {
@@ -326,7 +341,7 @@ void BottomDock::setActiveSection(int s) {
 
 void BottomDock::resizeEvent(QResizeEvent*) {
   // The source summary is the first thing to go on narrow screens.
-  m_status->setVisible(width() >= 1500);
+  m_status->setVisible(width() >= 1700);
 }
 
 void BottomDock::updateStatus() {

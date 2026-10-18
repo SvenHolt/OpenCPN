@@ -735,6 +735,11 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
             }),
       tr("Automatic switches at 07:00 and 19:00")));
 
+  l->addWidget(settingRow(
+      tr("Start screen"),
+      combo({tr("Cockpit"), tr("Chart")}, s.startInCockpit ? 0 : 1,
+            [](int i) { AppSettings::instance().startInCockpit = i == 0; })));
+
   l->addWidget(label(tr("UNITS"), "section"));
   l->addWidget(settingRow(
       tr("Speed"),

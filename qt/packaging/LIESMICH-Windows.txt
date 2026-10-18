@@ -12,6 +12,13 @@ nicht signiert ist: "Weitere Informationen" -> "Trotzdem ausführen".
 
 Zum Ausprobieren
 ----------------
+* Start im "Cockpit": animiertes Boot in der Kompassrose mit Kurs, Fahrt,
+  Wind und nächstem Wegpunkt. Unten links im Dock zwischen "Cockpit" und
+  "Karte" umschalten (Taste C).
+* Oben auf die Segelanzeige tippen (oder Dock "Segel"): Groß/Reffs,
+  Genua-Rollung, Spinnaker usw. einstellen. Bei "Motor" oder
+  "Motorsegeln" erscheint die Motoranzeige (Drehzahl, Temperatur,
+  Öldruck, Tank und Reichweite); der Simulator fährt entsprechend.
 * Unten im Dock "Karten" -> "Kartenordner hinzufügen": Ordner mit S-57-ENC
   (*.000) oder BSB-Rasterkarten (*.kap). Kostenlose ENCs: charts.noaa.gov
 * "Wetter" -> "Windvorhersage laden" (NOAA GFS, braucht Internet), oder

@@ -25,6 +25,27 @@ QString AisTarget::displayName() const {
   return name.isEmpty() ? QString::number(mmsi) : name;
 }
 
+bool Environment::hasWind() const {
+  return windTime.isValid() &&
+         windTime.secsTo(QDateTime::currentDateTimeUtc()) < 15 &&
+         !std::isnan(aws);
+}
+
+bool EngineData::running() const {
+  return lastUpdate.isValid() &&
+         lastUpdate.secsTo(QDateTime::currentDateTimeUtc()) < 10 &&
+         rpm == rpm && rpm > 100;
+}
+
+void trueWindFromApparent(double awa, double aws, double v, double& twa,
+                          double& tws) {
+  const double a = awa * M_PI / 180;
+  const double x = aws * std::cos(a) - v;  // along the bow
+  const double y = aws * std::sin(a);      // to starboard
+  tws = std::hypot(x, y);
+  twa = std::atan2(y, x) * 180 / M_PI;
+}
+
 NavStore& NavStore::instance() {
   static NavStore s;
   return s;
@@ -48,6 +69,55 @@ const Route* NavStore::route(const QString& id) const {
 }
 
 void NavStore::applyNavUpdate(const NavUpdate& u) {
+  const auto now = QDateTime::currentDateTimeUtc();
+  bool envChanged = false;
+  if (u.stw) m_env.stw = *u.stw, envChanged = true;
+  if (u.depth) m_env.depth = *u.depth, envChanged = true;
+  if (u.twa || u.tws || u.twd) {
+    if (u.twa) m_env.twa = *u.twa;
+    if (u.tws) m_env.tws = *u.tws;
+    if (u.twd) m_env.twd = *u.twd;
+    m_env.trueWindTime = now;
+    m_env.windTime = now;
+    envChanged = true;
+  }
+  if (u.awa && u.aws) {
+    m_env.awa = *u.awa;
+    m_env.aws = *u.aws;
+    m_env.windTime = now;
+    // Derive true wind unless a sensor delivers it.
+    const bool haveTrue =
+        m_env.trueWindTime.isValid() && m_env.trueWindTime.secsTo(now) < 5;
+    if (!haveTrue) {
+      const double v = m_env.stw == m_env.stw   ? m_env.stw
+                       : m_own.sog == m_own.sog ? m_own.sog
+                                                : 0.0;
+      trueWindFromApparent(m_env.awa, m_env.aws, v, m_env.twa, m_env.tws);
+    }
+    envChanged = true;
+  }
+  if (envChanged) {
+    const double hdg = m_own.hdg == m_own.hdg ? m_own.hdg : m_own.cog;
+    if (hdg == hdg && m_env.twa == m_env.twa &&
+        !(m_env.trueWindTime.isValid() && u.twd))
+      m_env.twd = geo::normalizeDeg(hdg + m_env.twa);
+    emit environmentChanged();
+  }
+  if (u.rpm || u.coolantC || u.oilBar || u.fuelPct || u.engineHours ||
+      u.voltage || u.fuelRateLph) {
+    if (u.rpm) m_engine.rpm = *u.rpm;
+    if (u.coolantC) m_engine.coolantC = *u.coolantC;
+    if (u.oilBar) m_engine.oilBar = *u.oilBar;
+    if (u.fuelPct) m_engine.fuelPct = *u.fuelPct;
+    if (u.engineHours) m_engine.hours = *u.engineHours;
+    if (u.voltage) m_engine.voltage = *u.voltage;
+    if (u.fuelRateLph) m_engine.fuelRateLph = *u.fuelRateLph;
+    if (u.rpm) m_engine.lastUpdate = now;
+    emit engineChanged();
+  }
+  const bool navData = u.lat || u.lon || u.sog || u.cog || u.hdg ||
+                       u.satellites || u.time || u.fixLost;
+  if (!navData) return;
   if (u.fixLost) {
     if (m_own.valid) {
       m_own.valid = false;

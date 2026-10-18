@@ -17,6 +17,7 @@ class Toast;
 class RouteEditBar;
 class TargetCard;
 class SideDrawer;
+class CockpitView;
 
 class MainWindow : public QWidget, public PluginHost {
   Q_OBJECT
@@ -39,6 +40,9 @@ public:
   ChartView* chart() const { return m_chart; }
   SideDrawer* drawer() const { return m_drawer; }
   void selectAisTarget(quint32 mmsi);
+  enum class View { Cockpit, Chart };
+  void setView(View v);
+  View view() const { return m_view; }
 
 protected:
   void resizeEvent(QResizeEvent*) override;
@@ -63,4 +67,7 @@ private:
   QPropertyAnimation m_instrumentsAnim;
   QVector<QPair<QWidget*, Qt::Corner>> m_overlays;
   int m_routesSection = -1;
+  int m_sailSection = -1;
+  CockpitView* m_cockpit;
+  View m_view = View::Chart;
 };

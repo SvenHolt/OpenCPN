@@ -23,6 +23,27 @@ struct OwnShip {
   QDateTime gpsTime;
 };
 
+/** Wind, water speed and depth. NaN = not available. */
+struct Environment {
+  double awa = kNaN, aws = kNaN;              // apparent, deg (+ = stbd), kn
+  double twa = kNaN, tws = kNaN, twd = kNaN;  // true
+  double stw = kNaN, depth = kNaN;
+  QDateTime windTime, trueWindTime;
+  bool hasWind() const;
+};
+
+struct EngineData {
+  double rpm = kNaN, coolantC = kNaN, oilBar = kNaN, fuelPct = kNaN;
+  double hours = kNaN, voltage = kNaN, fuelRateLph = kNaN;
+  QDateTime lastUpdate;
+  /** True when RPM data is recent and above idle threshold. */
+  bool running() const;
+};
+
+/** True wind from apparent wind and boat speed (angles in degrees). */
+void trueWindFromApparent(double awa, double aws, double boatSpeed, double& twa,
+                          double& tws);
+
 struct Waypoint {
   QString id;
   QString name;
@@ -75,6 +96,8 @@ public:
   static NavStore& instance();
 
   const OwnShip& ownShip() const { return m_own; }
+  const Environment& environment() const { return m_env; }
+  const EngineData& engine() const { return m_engine; }
   const QVector<Waypoint>& waypoints() const { return m_waypoints; }
   const QVector<Route>& routes() const { return m_routes; }
   const QHash<quint32, AisTarget>& aisTargets() const { return m_ais; }
@@ -120,6 +143,8 @@ public:
 
 signals:
   void ownShipChanged();
+  void environmentChanged();
+  void engineChanged();
   void waypointsChanged();
   void routesChanged();
   void aisChanged();
@@ -132,6 +157,8 @@ private:
   void updateAisDerived(AisTarget& t);
 
   OwnShip m_own;
+  Environment m_env;
+  EngineData m_engine;
   QVector<Waypoint> m_waypoints;
   QVector<Route> m_routes;
   QHash<quint32, AisTarget> m_ais;

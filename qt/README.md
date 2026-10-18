@@ -19,8 +19,10 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
   Pinch-Gesten, interpoliert bewegtes Eigenschiff; die Karten werden in
   einem Hintergrund-Thread gerendert
 
-| S-57-ENC · Nacht · Spotify | Wetter (GRIB) |
+| Cockpit (Startbildschirm) · Segeln | Cockpit · Motorsegeln mit Motordaten |
 | --- | --- |
+| ![Cockpit](doc/screenshot-cockpit.png) | ![Cockpit Motor](doc/screenshot-cockpit-engine.png) |
+| **S-57-ENC · Nacht · Spotify** | **Wetter (GRIB)** |
 | ![ENC](doc/screenshot-enc.png) | ![Wetter](doc/screenshot-weather.png) |
 | **Gezeiten · Tag** | **Aktive Route · Nacht** |
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
@@ -29,6 +31,9 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 
 | Bereich | Status |
 | --- | --- |
+| **Cockpit-Startbildschirm**: animiertes Boot in der Kompassrose | ✅ |
+| **Segelkonfiguration** (Groß/Reffs, Vorsegel/Rollung, Leichtwindsegel, Antrieb) | ✅ |
+| **Wind, Fahrt durchs Wasser, Tiefe, Motordaten** (NMEA MWV/MWD/VHW/DPT/DBT/RPM/XDR) | ✅ |
 | Vektor-Basiskarte (OpenCPN `data/basemap_shp`, 2 Detailstufen) | ✅ |
 | **S-57-ENC** (`*.000` + Updates), eigene S-52-nahe Darstellung | ✅ |
 | **Rasterkarten BSB/KAP** (NOAA RNC u. a.) mit REF-Georeferenzierung | ✅ |
@@ -44,6 +49,57 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
 | GPX-Import/-Export (auch OpenCPN `navobj.xml`) | ✅ |
 | S-63 (verschlüsselte ENC), CM93 | ❌ siehe Grenzen |
+
+### Cockpit
+
+Startbildschirm im Stil der Fahrzeugansicht moderner E-Autos. Über das Dock
+wechselt man zwischen **Cockpit** und **Karte**, mit der Taste `C` ebenso;
+in den Einstellungen lässt sich die Karte als Startansicht wählen.
+
+* **Kompassrose (Heading-up)** mit Steuerstrich. Am Ring markiert:
+  * Kurs über Grund
+  * Peilung zum nächsten Wegpunkt
+  * wahrer Wind als Pfeil, farbig nach Stärke und mit Knotenangabe
+  * scheinbarer Wind
+* **Animiertes Boot** von oben:
+  * Groß, Vorsegel und Leichtwindsegel nach der eingestellten
+    Konfiguration; Reffs werden markiert, die Genua ist gerollt
+  * die Segel stehen auf der Leeseite und werden mit dem scheinbaren
+    Windwinkel getrimmt; am Wind killen sie
+  * Krängungsschatten und Kielwasser, abhängig von der Fahrt
+  * Schraubenwasser bei laufendem Motor
+  * Wind- und Wasserpartikel
+* **Datenkarten:**
+  * Fahrt über Grund mit Fahrt durchs Wasser und Tiefe; Flachwasserwarnung
+    unter der Sicherheitstiefe
+  * Kurs über Grund mit Position
+  * wahrer Wind (Stärke, Richtung, Beaufort) und scheinbarer Wind; fehlt
+    ein Sensor für den wahren Wind, wird er aus dem scheinbaren Wind und
+    der Bootsgeschwindigkeit berechnet
+  * nächster Wegpunkt mit DTW, BTW, ETA und XTE
+* **Motorkarte**, sobald der Motor läuft (RPM > 100) oder „Motor“ bzw.
+  „Motorsegeln“ eingestellt ist:
+  * Drehzahlbogen
+  * Kühlwasser, Öldruck und Batterie mit Warnfarben
+  * Tankstand in Prozent und Litern
+  * Reichweite aus Tankinhalt, Verbrauch und SOG
+  * Betriebsstunden
+* **Segel-Seite** (Tippen auf die Segelanzeige oder Dock „Segel“):
+  * Antrieb: Segeln, Motorsegeln, Motor
+  * Großsegel: geborgen, voll, 1.–3. Reff
+  * Vorsegel: Genua mit Rollung in %, Fock, Sturmfock
+  * Leichtwindsegel: Gennaker, Spinnaker, Code 0
+  * Tank: Inhalt, Verbrauch bei Marschdrehzahl, Füllstand ohne Sensor
+* **Motordaten per NMEA 0183:**
+  * `RPM` (Quelle E)
+  * `XDR` mit Kühlwasser (`C`, Name `ENGINE…`), Öldruck (`P`, `…OIL…`),
+    Tank (`V`, `FUEL…`), Batterie (`U`, `BAT…`), Betriebsstunden (`G`,
+    `…HOUR…`) und Verbrauch (`E`, `FUELRATE…`)
+* **Simulator:**
+  * segelt nach einer einfachen Polare
+  * fällt am Wind auf 40° ab
+  * motort passend zur Konfiguration
+  * liefert Wind, Fahrt durchs Wasser, Tiefe und Motordaten
 
 ### Seekarten
 
@@ -167,6 +223,7 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--charts <ordner>` | fügt einen Kartenordner hinzu |
 | `--grib <datei>` | öffnet eine GRIB-Datei |
 | `--center lat,lon[,maßstab]` | zentriert die Karte, z. B. `40.84,-73.93,15000` |
+| `--view cockpit\|chart` | Startansicht |
 | `--day` | startet im Tagmodus |
 | `--page N` | öffnet das Seitenpanel N (0 Karten, 1 Routen …) |
 | `--fresh` | nutzt temporäre Einstellungen und Daten; die echte Konfiguration bleibt unberührt |
@@ -213,7 +270,8 @@ qt/
 ├── src/core/              UI-unabhängig (libocpnqt_core.so)
 │   ├── GeoMath            Mercator, Großkreis, XTE, CPA/TCPA
 │   ├── Nmea, Ais          Parser + AIS-Decoder
-│   ├── NavStore           Eigenschiff, Routen, Wegpunkte, AIS, Zielführung
+│   ├── NavStore           Eigenschiff, Wind, Motor, Routen, AIS, Zielführung
+│   ├── BoatConfig         Segelkonfiguration, Antrieb, Tank
 │   ├── Connections        UDP/TCP/Seriell/Simulator → NMEA → NavStore
 │   ├── GpxIO, TrackRecorder
 │   ├── Tides              harmonische Gezeitenvorhersage
@@ -221,6 +279,7 @@ qt/
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
 ├── src/ui/                Widgets (libocpnqt_ui.so)
 │   ├── Theme, Icons, GlassPanel
+│   ├── CockpitView, SailPage Cockpit-Startbildschirm, Segelkonfiguration
 │   ├── ChartView, MapLayer   Karte (Render-Thread) + Overlay-Ebenen
 │   ├── Overlays, SideDrawer, DrawerPages
 │   ├── TracksPage, TidesPage, WeatherPage

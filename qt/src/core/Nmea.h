@@ -14,6 +14,12 @@ struct NavUpdate {
   std::optional<int> satellites;
   std::optional<QDateTime> time;
   bool fixLost = false;
+  // Environment: apparent wind angle (-180..180, + = starboard) and speed
+  // (kn), true wind angle/speed/direction, speed through water (kn), depth (m)
+  std::optional<double> awa, aws, twa, tws, twd, stw, depth;
+  // Engine (RPM, XDR): rpm, coolant °C, oil bar, fuel %, hours, volt, l/h
+  std::optional<double> rpm, coolantC, oilBar, fuelPct, engineHours, voltage,
+      fuelRateLph;
 };
 
 class NmeaParser : public QObject {

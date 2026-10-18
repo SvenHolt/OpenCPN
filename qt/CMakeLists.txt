@@ -71,6 +71,7 @@ set(OCPN_QT_CORE_SOURCES
   src/core/Simulator.cpp
   src/core/AppSettings.cpp
   src/core/TrackRecorder.cpp
+  src/core/BoatConfig.cpp
   src/core/Tides.cpp
   src/core/Grib.cpp
   src/core/GribDownload.cpp
@@ -110,6 +111,8 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/TracksPage.cpp
   src/ui/TidesPage.cpp
   src/ui/WeatherPage.cpp
+  src/ui/CockpitView.cpp
+  src/ui/SailPage.cpp
   src/api/OcpnPlugin.h
 )
 target_link_libraries(ocpnqt_ui PUBLIC ocpnqt_core Qt6::Widgets Qt6::Svg

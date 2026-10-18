@@ -40,6 +40,11 @@ private:
   QTimer m_timer;
   double m_lat = 54.47, m_lon = 10.28;  // Kiel Bay
   double m_sog = 6.5, m_cog = 20, m_hdg = 20;
+  void simulateBoat(QByteArray& out);
+
   QVector<Vessel> m_vessels;
   int m_tick = 0;
+  // Environment and engine
+  double m_twd = 240, m_tws = 14;
+  double m_rpm = 0, m_coolant = 20, m_fuelPct = 82, m_engineHours = 1243.6;
 };

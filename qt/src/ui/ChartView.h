@@ -91,6 +91,8 @@ public:
 
 signals:
   void viewChanged();
+  /** The user asked to look at a place (center/fit), e.g. from a list. */
+  void navigationRequested();
   void followChanged(bool on);
   void routeEditChanged(int points);
   void aisTargetClicked(quint32 mmsi);

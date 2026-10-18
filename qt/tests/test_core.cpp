@@ -4,6 +4,7 @@
 #include "core/Ais.h"
 #include "core/GeoMath.h"
 #include "core/GpxIO.h"
+#include "core/NavStore.h"
 #include "core/Nmea.h"
 #include "core/Simulator.h"
 #include "core/TrackRecorder.h"
@@ -111,6 +112,38 @@ private slots:
   }
 
   void trackRecording();
+
+  void windAndEngineSentences() {
+    // Apparent 45° stbd at 15 kn, boat 6 kn: true wind 11.56 kn at 66.6°.
+    double twa, tws;
+    trueWindFromApparent(45, 15, 6, twa, tws);
+    QVERIFY(qAbs(tws - 11.56) < 0.01);
+    QVERIFY(qAbs(twa - 66.6) < 0.1);
+    trueWindFromApparent(-30, 10, 0, twa, tws);  // at rest: unchanged
+    QVERIFY(qAbs(tws - 10) < 1e-9 && qAbs(twa + 30) < 1e-9);
+
+    NmeaParser p;
+    QVector<NavUpdate> got;
+    connect(&p, &NmeaParser::navUpdate, this,
+            [&](const NavUpdate& u) { got << u; });
+    QVERIFY(p.parseLine(NmeaParser::makeSentence("IIMWV,090,R,10.0,M,A")));
+    QCOMPARE(*got.last().awa, 90.0);
+    QVERIFY(qAbs(*got.last().aws - 19.44) < 0.01);  // m/s -> kn
+    QVERIFY(!p.parseLine(NmeaParser::makeSentence("IIMWV,090,R,10.0,N,V")));
+    QVERIFY(p.parseLine(NmeaParser::makeSentence("IIMWD,245.0,T,242.0,M,"
+                                                 "18.2,N,9.4,M")));
+    QCOMPARE(*got.last().twd, 245.0);
+    QCOMPARE(*got.last().tws, 18.2);
+    QVERIFY(p.parseLine(NmeaParser::makeSentence("SDDBT,32.8,f,10.0,M,5.5,F")));
+    QCOMPARE(*got.last().depth, 10.0);
+    QVERIFY(!p.parseLine(NmeaParser::makeSentence("IIRPM,S,1,1200,,A")));
+    QVERIFY(p.parseLine(
+        NmeaParser::makeSentence("IIXDR,C,358.15,K,ENGINE#0,P,350000,P,"
+                                 "ENGOIL#0,E,4.2,L,FUELRATE#0")));
+    QVERIFY(qAbs(*got.last().coolantC - 85.0) < 1e-9);
+    QVERIFY(qAbs(*got.last().oilBar - 3.5) < 1e-9);
+    QCOMPARE(*got.last().fuelRateLph, 4.2);
+  }
   void tidePrediction();
 
   void gpxRoundTrip() {

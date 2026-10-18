@@ -4,6 +4,7 @@
 #include <QSettings>
 #include <cmath>
 
+#include "core/BoatConfig.h"
 #include "core/GeoMath.h"
 #include "core/NavStore.h"
 
@@ -153,6 +154,85 @@ void SimulatorConnection::spawnTraffic() {
   }
 }
 
+void SimulatorConnection::simulateBoat(QByteArray& out) {
+  const SailConfig& sails = BoatConfig::instance().sails();
+  const BoatConfig& boat = BoatConfig::instance();
+  auto* rng = QRandomGenerator::global();
+  // Wind: slow veering plus gusts.
+  m_twd = geo::normalizeDeg(240 + 12 * std::sin(m_tick / 300.0) +
+                            rng->bounded(4.0) - 2);
+  m_tws = 14 + 3 * std::sin(m_tick / 45.0) + rng->bounded(2.0) - 1;
+
+  double twa = geo::angleDiff(m_hdg, m_twd);  // wind from, relative to bow
+  // A sailing-only boat cannot point higher than ~40° to the true wind.
+  if (!sails.motoring() && std::fabs(twa) < 40) {
+    m_cog = geo::normalizeDeg(m_twd - (twa >= 0 ? 40 : -40));
+    twa = twa >= 0 ? 40 : -40;
+  }
+
+  // Very simple polar: fraction of TWS by true wind angle, hull speed cap.
+  const double a = std::fabs(twa);
+  double polar = a < 35    ? 0.05
+                 : a < 60  ? 0.30 + (a - 35) / 25 * 0.20
+                 : a < 150 ? 0.50 + (a - 60) / 90 * 0.08
+                           : 0.52;
+  double area = sails.main == SailConfig::Main::Down &&
+                        sails.head == SailConfig::Head::None
+                    ? 0.0
+                    : std::min(1.0, std::sqrt(sails.areaFactor()));
+  if (sails.downwind != SailConfig::Downwind::None && a > 70) area *= 1.2;
+  const double sailSpeed = std::min(7.6, m_tws * polar * area);
+
+  // Engine
+  const double targetRpm =
+      sails.propulsion == SailConfig::Propulsion::Motor ? boat.cruiseRpm
+      : sails.propulsion == SailConfig::Propulsion::MotorSailing
+          ? boat.cruiseRpm * 0.8
+          : 0.0;
+  m_rpm += (targetRpm - m_rpm) * 0.25;
+  if (m_rpm < 50) m_rpm = 0;
+  const double motorSpeed = 6.3 * std::min(1.2, m_rpm / boat.cruiseRpm);
+  const double target =
+      std::max(sailSpeed, motorSpeed) + (motorSpeed > 0 ? sailSpeed * 0.3 : 0);
+  m_sog += (std::min(target, 8.2) - m_sog) * 0.08;
+  const double running = m_rpm > 100;
+  m_coolant += ((running ? 82.0 : 20.0) - m_coolant) * (running ? 0.02 : 0.004);
+  if (running) {
+    const double lph =
+        boat.consumptionLph * std::pow(m_rpm / boat.cruiseRpm, 2.5);
+    m_fuelPct = std::max(0.0, m_fuelPct - lph / 3600.0 / boat.tankLiters * 100);
+    m_engineHours += 1 / 3600.0;
+  }
+
+  // Apparent wind = true wind + headwind from the boat's own speed.
+  const double tr = twa * M_PI / 180;
+  const double ax = m_tws * std::cos(tr) + m_sog, ay = m_tws * std::sin(tr);
+  const double aws = std::hypot(ax, ay);
+  const double awa = std::atan2(ay, ax) * 180 / M_PI;
+  auto line = [&out](const QString& body) {
+    out += NmeaParser::makeSentence(body).toLatin1() + "\r\n";
+  };
+  line(QStringLiteral("WIMWV,%1,R,%2,N,A")
+           .arg(geo::normalizeDeg(awa), 0, 'f', 1)
+           .arg(aws, 0, 'f', 1));
+  line(QStringLiteral("WIMWV,%1,T,%2,N,A")
+           .arg(geo::normalizeDeg(twa), 0, 'f', 1)
+           .arg(m_tws, 0, 'f', 1));
+  line(QStringLiteral("VWVHW,,T,,M,%1,N,%2,K")
+           .arg(m_sog * 0.97, 0, 'f', 1)
+           .arg(m_sog * 0.97 * 1.852, 0, 'f', 1));
+  line(QStringLiteral("SDDPT,%1,0.5")
+           .arg(14 + 6 * std::sin(m_tick / 60.0), 0, 'f', 1));
+  line(QStringLiteral("ERRPM,E,1,%1,,A").arg(m_rpm, 0, 'f', 0));
+  line(QStringLiteral("ERXDR,C,%1,C,ENGINE#0,P,%2,B,ENGOIL#0,V,%3,P,FUEL#0,"
+                      "U,%4,V,BATTERY#0,G,%5,H,ENGINEHOURS#0")
+           .arg(m_coolant, 0, 'f', 1)
+           .arg(running ? 3.4 + rng->bounded(0.2) : 0.0, 0, 'f', 1)
+           .arg(m_fuelPct, 0, 'f', 1)
+           .arg(running ? 14.1 : 12.7, 0, 'f', 1)
+           .arg(m_engineHours, 0, 'f', 1));
+}
+
 void SimulatorConnection::tick() {
   ++m_tick;
   const Guidance& g = NavStore::instance().guidance();
@@ -161,6 +241,8 @@ void SimulatorConnection::tick() {
     const double d = geo::angleDiff(m_cog, g.btwDeg);
     m_cog = geo::normalizeDeg(m_cog + qBound(-4.0, d, 4.0));
   }
+  QByteArray boat;
+  simulateBoat(boat);
   m_hdg = geo::normalizeDeg(m_cog + 2 * std::sin(m_tick / 7.0));
   geo::destination(m_lat, m_lon, m_cog, m_sog / 3600.0, m_lat, m_lon);
 
@@ -199,6 +281,7 @@ void SimulatorConnection::tick() {
              .toLatin1() +
          "\r\n";
 
+  out += boat;
   int seq = 0;
   for (Vessel& v : m_vessels) {
     geo::destination(v.lat, v.lon, v.cog, v.sog / 3600.0, v.lat, v.lon);

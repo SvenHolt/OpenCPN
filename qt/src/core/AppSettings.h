@@ -31,6 +31,7 @@ public:
   bool showChartOutlines = true;
   // Track recording
   bool trackRecording = true;
+  bool startInCockpit = true;
 
   void load();
   void save();

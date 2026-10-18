@@ -6,7 +6,9 @@
 
 #include "core/AppSettings.h"
 #include "core/NavStore.h"
+#include "ui/CockpitView.h"
 #include "ui/DrawerPages.h"
+#include "ui/SailPage.h"
 #include "ui/Icons.h"
 #include "ui/Overlays.h"
 #include "ui/SideDrawer.h"
@@ -23,7 +25,7 @@ constexpr int kShadow = GlassPanel::kShadow;
 MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
     : QWidget(parent) {
   setWindowTitle(tr("OpenCPN"));
-  setMinimumSize(960, 640);
+  setMinimumSize(1024, 640);
 
   m_chart = new ChartView(this);
   m_chart->setLandData(std::move(land));
@@ -32,6 +34,7 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_controls = new MapControls(m_chart, this);
   m_target = new TargetCard(this);
   m_routeBar = new RouteEditBar(this);
+  m_cockpit = new CockpitView(this);
   m_toast = new Toast(this);
   m_drawer = new SideDrawer(this);
   m_dock = new BottomDock(this);
@@ -52,11 +55,22 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_chart->addLayer(new TideLayer(this));
   addSection("wind", tr("Weather"), new WeatherPage(m_chart));
   m_chart->addLayer(new GribLayer(this));
-  addOverlay(new WeatherTimeBar, Qt::BottomLeftCorner);
+  auto* timeBar = new WeatherTimeBar;
+  timeBar->setProperty("chartOnly", true);
+  addOverlay(timeBar, Qt::BottomLeftCorner);
+  m_sailSection = addSection("sail", tr("Sails"), new SailPage);
   addSection("signal", tr("Data"), new ConnectionsPage);
   addSection("sliders", tr("Settings"), new SettingsPage);
 
   connect(m_dock, &BottomDock::sectionRequested, m_drawer, &SideDrawer::toggle);
+  connect(m_dock, &BottomDock::viewRequested, this,
+          [this](int v) { setView(v == 0 ? View::Cockpit : View::Chart); });
+  connect(m_cockpit, &CockpitView::sailConfigRequested, this,
+          [this] { m_drawer->open(m_sailSection); });
+  connect(m_cockpit, &CockpitView::routesRequested, this,
+          [this] { m_drawer->open(m_routesSection); });
+  connect(m_chart, &ChartView::navigationRequested, this,
+          [this] { setView(View::Chart); });
   connect(m_dock, &BottomDock::mobRequested, this,
           [] { NavStore::instance().manOverboard(); });
   connect(m_drawer, &SideDrawer::pageChanged, this, [this](int page) {
@@ -87,10 +101,18 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   connect(&NavStore::instance(), &NavStore::guidanceChanged, this,
           [this] { layoutOverlays(); });
 
+  setView(AppSettings::instance().startInCockpit ? View::Cockpit : View::Chart);
   layoutOverlays();
 }
 
 MainWindow::~MainWindow() = default;
+
+void MainWindow::setView(View v) {
+  m_view = v;
+  m_cockpit->setVisible(v == View::Cockpit);
+  m_dock->setActiveView(v == View::Cockpit ? 0 : 1);
+  layoutOverlays();
+}
 
 int MainWindow::addSection(const QString& icon, const QString& title,
                            QWidget* page) {
@@ -154,6 +176,8 @@ void MainWindow::layoutOverlays(bool animate) {
   const bool drawerOpen = m_drawer->isOpen();
   const int left = drawerOpen ? SideDrawer::kWidth + kGap : 0;
   m_chart->setInsets(left, 0);
+  m_cockpit->setGeometry(0, 0, w, mapH);
+  m_cockpit->setLeftInset(left);
 
   m_instruments->resize(m_instruments->sizeHint());
   const QPoint instPos(left + kGap - kShadow, kGap - kShadow);
@@ -176,9 +200,15 @@ void MainWindow::layoutOverlays(bool animate) {
   m_routeBar->adjustSize();
   m_routeBar->move(freeX + std::max(0, (freeW - m_routeBar->width()) / 2), y);
   if (m_routeBar->isVisible()) y += m_routeBar->height() - kShadow;
-  m_toast->move(std::min(freeX + std::max(0, (freeW - m_toast->width()) / 2),
-                         w - m_toast->width()),
-                y);
+  if (m_view == View::Cockpit) {
+    // Between the cockpit's card columns, below the sail plan pill.
+    const int cx = (left + w) / 2;
+    m_toast->move(std::max(left, cx - m_toast->width() / 2), 56);
+  } else {
+    m_toast->move(std::min(freeX + std::max(0, (freeW - m_toast->width()) / 2),
+                           w - m_toast->width()),
+                  y);
+  }
 
   m_controls->adjustSize();
   m_controls->move(w - m_controls->width() - kGap,
@@ -219,7 +249,13 @@ void MainWindow::layoutOverlays(bool animate) {
   m_guidance->raise();
   m_controls->raise();
   m_target->raise();
-  for (const auto& o : m_overlays) o.first->raise();
+  // The cockpit covers the chart and its overlays; plugin cards (media)
+  // stay on top, the weather scrubber belongs to the chart.
+  for (const auto& o : m_overlays)
+    if (o.first->property("chartOnly").toBool()) o.first->raise();
+  if (m_view == View::Cockpit) m_cockpit->raise();
+  for (const auto& o : m_overlays)
+    if (!o.first->property("chartOnly").toBool()) o.first->raise();
   m_drawer->raise();
   m_routeBar->raise();
   m_toast->raise();
@@ -250,6 +286,7 @@ void MainWindow::showContextMenu(double lat, double lon, const QPoint& global) {
 }
 
 void MainWindow::beginRouteCreate() {
+  setView(View::Chart);
   m_drawer->close();
   m_chart->startRouteCreate();
   m_routeBar->setPointCount(0);
@@ -280,6 +317,9 @@ void MainWindow::keyPressEvent(QKeyEvent* e) {
       break;
     case Qt::Key_F:
       m_chart->setFollow(true);
+      break;
+    case Qt::Key_C:
+      setView(m_view == View::Cockpit ? View::Chart : View::Cockpit);
       break;
     case Qt::Key_F11:
       setWindowState(windowState() ^ Qt::WindowFullScreen);

@@ -12,6 +12,7 @@
 #include "core/AppSettings.h"
 #include "core/Connections.h"
 #include "core/GeoMath.h"
+#include "core/BoatConfig.h"
 #include "core/Grib.h"
 #include "core/NavStore.h"
 #include "core/Tides.h"
@@ -124,11 +125,12 @@ int main(int argc, char** argv) {
   QCommandLineOption charts("charts", "Add a chart directory or file.", "path");
   QCommandLineOption center(
       "center", "Center the chart: lat,lon[,display scale].", "lat,lon,scale");
+  QCommandLineOption view("view", "Start view: cockpit or chart.", "view");
   QCommandLineOption grib("grib", "Open a GRIB file.", "file");
   QCommandLineOption fresh("fresh",
                            "Ignore stored settings and data (testing).");
-  cli.addOptions(
-      {shot, shotSize, delay, demo, day, page, charts, center, grib, fresh});
+  cli.addOptions({shot, shotSize, delay, demo, day, page, charts, center, grib,
+                  view, fresh});
   cli.process(app);
 
   if (cli.isSet(fresh)) {
@@ -147,6 +149,7 @@ int main(int argc, char** argv) {
   if (cli.isSet(day)) settings.theme = AppSettings::ThemeMode::Day;
   Theme::instance().apply();
 
+  BoatConfig::instance().load();
   auto land = loadBasemap();
   S57Chart::setRegistryDir(findDataDir() + "/s57data");
   ChartDatabase::instance().load();
@@ -159,6 +162,9 @@ int main(int argc, char** argv) {
 
   MainWindow win(land);
   PluginManager::instance().loadAll(&win);
+  if (cli.isSet(view))
+    win.setView(cli.value(view) == "chart" ? MainWindow::View::Chart
+                                           : MainWindow::View::Cockpit);
   if (cli.isSet(grib)) {
     QString err;
     if (!GribManager::instance().open(cli.value(grib), &err))
@@ -181,9 +187,10 @@ int main(int argc, char** argv) {
     win.resize(wh.value(0).toInt(), wh.value(1).toInt());
     win.show();
     if (cli.isSet(demo))
-      QTimer::singleShot(1500, &win, [&win] {
+      QTimer::singleShot(1500, &win, [&win, &cli, &view] {
         const auto box = createDemoRoute();
         win.chart()->fitGeoBounds(box[0], box[1], box[2], box[3]);
+        if (cli.value(view) != "chart") win.setView(MainWindow::View::Cockpit);
       });
     if (cli.isSet(page))
       QTimer::singleShot(1800, &win, [&win, &cli, &page] {
