@@ -72,6 +72,7 @@ private:
   void exportGpx();
   ChartView* m_chart;
   RoutePlanPanel* m_planner;
+  QString m_shownActive;  // active route the list shows
 };
 
 class MarksPage : public ListPage {

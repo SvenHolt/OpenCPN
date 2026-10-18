@@ -8,6 +8,7 @@
 #include "core/NavStore.h"
 #include "core/Shapefile.h"
 #include "ui/ChartView.h"
+#include "ui/DrawerPages.h"
 #include "ui/MainWindow.h"
 #include "core/osm/OnlineOsm.h"
 #include "ui/OfflinePage.h"
@@ -200,6 +201,44 @@ private slots:
     QCOMPARE(state.value("source").toString(), QStringLiteral("icon_seamless"));
     passage->restoreState(state);
     passage->setRoute({});
+  }
+
+  void routesPageStableWhileNavigating() {
+    // A position fix must not rebuild the routes page (it made the page and
+    // the planner on it jump every second).
+    Route r;
+    r.name = "Stable";
+    for (const auto& [lat, lon] :
+         std::initializer_list<std::pair<double, double>>{{54.5, 10.3},
+                                                          {54.6, 10.4}}) {
+      Waypoint w;
+      w.lat = lat;
+      w.lon = lon;
+      r.points << w;
+    }
+    const QString id = NavStore::instance().addRoute(r);
+    NavStore::instance().activateRoute(id, 1);
+    QTest::qWait(50);
+    auto* page = m_win->findChild<RoutesPage*>();
+    QVERIFY(page);
+    const QList<ListRow*> rows = page->findChildren<ListRow*>();
+    QVERIFY(!rows.isEmpty());
+    QList<QPointer<ListRow>> watched;
+    for (ListRow* row : rows) watched << row;
+    OwnShip own = NavStore::instance().ownShip();
+    for (int i = 0; i < 5; ++i) {
+      own.lat += 0.001;
+      own.lastFix = QDateTime::currentDateTimeUtc();
+      NavStore::instance().setOwnShip(own);
+      QTest::qWait(20);
+    }
+    for (const auto& row : watched) QVERIFY(row);
+    // Stopping the navigation does rebuild it.
+    NavStore::instance().stopNavigation();
+    QTest::qWait(50);
+    bool rebuilt = false;
+    for (const auto& row : watched) rebuilt |= row.isNull();
+    QVERIFY(rebuilt);
   }
 
   void boatView() {

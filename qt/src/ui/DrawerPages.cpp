@@ -220,7 +220,15 @@ RoutesPage::RoutesPage(ChartView* chart, QWidget* parent)
 
   auto& store = NavStore::instance();
   connect(&store, &NavStore::routesChanged, this, &RoutesPage::rebuild);
-  connect(&store, &NavStore::guidanceChanged, this, &RoutesPage::rebuild);
+  // Guidance updates with every position fix; the list only shows which
+  // route is active, so it is rebuilt only when that changes (a rebuild
+  // makes the page, planner included, jump).
+  connect(&store, &NavStore::guidanceChanged, this, [this] {
+    const auto& nav = NavStore::instance();
+    const QString key = nav.guidance().active ? nav.activeRouteId() : QString();
+    if (key == m_shownActive) return;
+    rebuild();
+  });
   connect(&AppSettings::instance(), &AppSettings::changed, this,
           &RoutesPage::rebuild);
   connect(&Theme::instance(), &Theme::changed, this, &RoutesPage::rebuild);
@@ -230,6 +238,7 @@ RoutesPage::RoutesPage(ChartView* chart, QWidget* parent)
 void RoutesPage::rebuild() {
   clearRows();
   const auto& store = NavStore::instance();
+  m_shownActive = store.guidance().active ? store.activeRouteId() : QString();
   const Palette& pal = Theme::p();
   for (const Route& r : store.routes()) {
     const bool active =
