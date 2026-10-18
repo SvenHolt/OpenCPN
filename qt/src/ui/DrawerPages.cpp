@@ -32,6 +32,7 @@
 #include "ui/GlassPanel.h"
 #include "ui/Icons.h"
 #include "ui/Overlays.h"
+#include "ui/PluginManager.h"
 #include "ui/Theme.h"
 
 namespace {
@@ -798,6 +799,43 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
       tr("Arrival radius"),
       dspin(s.arrivalRadiusNm, 0.01, 1, 0.01, " NM", 2,
             [](double v) { AppSettings::instance().arrivalRadiusNm = v; })));
+
+  l->addWidget(label(tr("PLUGINS"), "section"));
+  auto* plugins = new QWidget;
+  auto* pl = new QVBoxLayout(plugins);
+  pl->setContentsMargins(0, 0, 0, 0);
+  pl->setSpacing(2);
+  l->addWidget(plugins);
+  auto rebuildPlugins = [plugins, pl] {
+    while (QLayoutItem* it = pl->takeAt(0)) {
+      if (it->widget()) it->widget()->deleteLater();
+      delete it;
+    }
+    auto& pm = PluginManager::instance();
+    if (pm.plugins().isEmpty()) {
+      auto* none = label(tr("No plugins installed"), "dim");
+      none->setContentsMargins(4, 6, 4, 6);
+      pl->addWidget(none);
+    }
+    for (const PluginInfo& info : pm.plugins()) {
+      auto* t = new ToggleSwitch;
+      t->setChecked(info.enabled);
+      const QString id = info.id;
+      QObject::connect(t, &QAbstractButton::toggled, t, [id](bool on) {
+        PluginManager::instance().setEnabled(id, on);
+      });
+      QString hint = info.description;
+      if (!info.error.isEmpty()) hint = info.error;
+      if (info.loaded != info.enabled)
+        hint += (hint.isEmpty() ? "" : " · ") + QObject::tr("restart needed");
+      pl->addWidget(settingRow(
+          info.name + (info.version.isEmpty() ? "" : "  " + info.version), t,
+          hint));
+    }
+  };
+  connect(&PluginManager::instance(), &PluginManager::pluginsChanged, plugins,
+          rebuildPlugins);
+  rebuildPlugins();
 
   l->addWidget(label(tr("ABOUT"), "section"));
   auto* about =

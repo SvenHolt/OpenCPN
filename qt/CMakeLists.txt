@@ -56,7 +56,14 @@ set(OCPN_QT_CORE_SOURCES
   src/core/charts/ChartDatabase.cpp
 )
 
-add_library(ocpnqt_core STATIC ${OCPN_QT_CORE_SOURCES})
+# Core and UI are shared libraries so that plugins share the application's
+# singletons (theme, navigation data) with the executable.
+include(GNUInstallDirs)
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
+set(OCPN_QT_PLUGIN_DIR ${CMAKE_INSTALL_LIBDIR}/opencpn-qt/plugins)
+
+add_library(ocpnqt_core SHARED ${OCPN_QT_CORE_SOURCES})
 target_include_directories(ocpnqt_core PUBLIC src)
 target_link_libraries(ocpnqt_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network
   Qt6::Concurrent PRIVATE ocpnqt_s57reader)
@@ -65,7 +72,7 @@ if(Qt6SerialPort_FOUND)
   target_compile_definitions(ocpnqt_core PUBLIC OCPN_QT_HAVE_SERIAL)
 endif()
 
-add_library(ocpnqt_ui STATIC
+add_library(ocpnqt_ui SHARED
   src/ui/Theme.cpp
   src/ui/Icons.cpp
   src/ui/GlassPanel.cpp
@@ -92,8 +99,18 @@ target_compile_definitions(opencpn-qt PRIVATE
   OCPN_QT_SOURCE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data"
   OCPN_QT_INSTALL_DATA_DIR="${CMAKE_INSTALL_PREFIX}/share/opencpn")
 
-install(TARGETS opencpn-qt RUNTIME DESTINATION bin)
+install(TARGETS opencpn-qt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS ocpnqt_core ocpnqt_ui
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY src/api src/ui src/core
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/opencpn-qt
+  FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY ../data/s57data ../data/tcdata DESTINATION share/opencpn)
 install(DIRECTORY ../data/basemap_shp DESTINATION share/opencpn)
+
+# Plugins are built into <build>/plugins, where the application finds them.
+add_subdirectory(plugins/media)
 
 option(OCPN_QT_BUILD_TESTS "Build opencpn-qt unit tests" ON)
 if(OCPN_QT_BUILD_TESTS)
@@ -119,6 +136,21 @@ if(OCPN_QT_BUILD_TESTS)
     target_compile_definitions(ocpnqt_grib_tests PRIVATE
       OCPN_QT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
     add_test(NAME ocpnqt_grib_tests COMMAND ocpnqt_grib_tests)
+    add_executable(ocpnqt_media_tests tests/test_media.cpp)
+    target_link_libraries(ocpnqt_media_tests PRIVATE media_pi_core Qt6::Test)
+    if(TARGET Qt6::DBus)
+      add_executable(fake_mpris_player tests/fake_mpris_player.cpp)
+      target_link_libraries(fake_mpris_player PRIVATE Qt6::DBus)
+    endif()
+    find_program(DBUS_RUN_SESSION dbus-run-session)
+    if(DBUS_RUN_SESSION)
+      add_test(NAME ocpnqt_media_tests
+        COMMAND ${DBUS_RUN_SESSION} -- $<TARGET_FILE:ocpnqt_media_tests>)
+    else()
+      add_test(NAME ocpnqt_media_tests COMMAND ocpnqt_media_tests)
+    endif()
+    set_tests_properties(ocpnqt_media_tests PROPERTIES
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(ocpnqt_ui_tests tests/test_ui.cpp)
     target_link_libraries(ocpnqt_ui_tests PRIVATE ocpnqt_ui Qt6::Test)
     add_test(NAME ocpnqt_ui_tests COMMAND ocpnqt_ui_tests)

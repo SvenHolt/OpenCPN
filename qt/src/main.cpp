@@ -19,6 +19,7 @@
 #include "core/charts/ChartDatabase.h"
 #include "core/charts/S57Chart.h"
 #include "ui/MainWindow.h"
+#include "ui/PluginManager.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
 
@@ -152,6 +153,7 @@ int main(int argc, char** argv) {
   if (settings.trackRecording) TrackRecorder::instance().start();
 
   MainWindow win(land);
+  PluginManager::instance().loadAll(&win);
   if (cli.isSet(grib)) {
     QString err;
     if (!GribManager::instance().open(cli.value(grib), &err))
@@ -196,6 +198,7 @@ int main(int argc, char** argv) {
       });
   }
   const int rc = app.exec();
+  PluginManager::instance().shutdownAll();
   TrackRecorder::instance().saveToDisk();
   for (auto* c : ConnectionManager::instance().connections()) c->stop();
   return rc;

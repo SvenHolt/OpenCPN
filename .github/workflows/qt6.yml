@@ -9,6 +9,11 @@ on:
     paths:
       - 'qt/**'
       - 'data/basemap_shp/**'
+      - 'data/s57data/**'
+      - 'data/tcdata/**'
+      - 'libs/iso8211/**'
+      - 'libs/gdal/**'
+      - 'libs/s57-charts/**'
       - '.github/workflows/qt6.yml'
   pull_request:
     branches:
@@ -16,6 +21,11 @@ on:
     paths:
       - 'qt/**'
       - 'data/basemap_shp/**'
+      - 'data/s57data/**'
+      - 'data/tcdata/**'
+      - 'libs/iso8211/**'
+      - 'libs/gdal/**'
+      - 'libs/s57-charts/**'
       - '.github/workflows/qt6.yml'
 
 jobs:
@@ -28,7 +38,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qt6-base-dev qt6-svg-dev libqt6serialport6-dev libgl-dev
+            qt6-base-dev qt6-svg-dev libqt6serialport6-dev libgl-dev dbus
 
       - name: Configure
         run: cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release
