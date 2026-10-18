@@ -263,10 +263,13 @@ private slots:
     QVERIFY(std::fabs(stored->lengthNm() -
                       geo::distanceNm(54.33, 10.15, 54.40, 10.22)) < 1e-9);
     // On disk, readable without network.
-    QFile f(store.folder(id) + "/voyage.json");
-    QVERIFY(f.open(QIODevice::ReadOnly));
-    const Voyage back =
-        Voyage::fromJson(QJsonDocument::fromJson(f.readAll()).object());
+    Voyage back;
+    {
+      // Closed again before removing (Windows cannot delete open files).
+      QFile f(store.folder(id) + "/voyage.json");
+      QVERIFY(f.open(QIODevice::ReadOnly));
+      back = Voyage::fromJson(QJsonDocument::fromJson(f.readAll()).object());
+    }
     QCOMPARE(back.name, v.name);
     QCOMPARE(back.route, v.route);
     QCOMPARE(back.settings.value("window").toInt(), 3);
