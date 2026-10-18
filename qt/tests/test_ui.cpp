@@ -9,6 +9,7 @@
 #include "core/Shapefile.h"
 #include "ui/ChartView.h"
 #include "ui/MainWindow.h"
+#include "core/osm/OnlineOsm.h"
 #include "ui/OfflinePage.h"
 #include "ui/RoutePlanPanel.h"
 #include "ui/SideDrawer.h"
@@ -27,6 +28,8 @@ private slots:
         QSettings::IniFormat, QSettings::UserScope,
         QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
     Theme::instance().apply();
+    // No requests to public servers from the tests.
+    OnlineOsm::instance().setEnabled(false);
     m_win = new MainWindow(std::make_shared<LandData>());
     m_win->resize(1400, 900);
     m_win->show();

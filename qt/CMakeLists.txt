@@ -76,12 +76,14 @@ set(OCPN_QT_CORE_SOURCES
   src/core/Grib.cpp
   src/core/GribDownload.cpp
   src/core/RoutePlanner.cpp
+  src/core/PassagePlanner.cpp
   src/core/charts/Chart.cpp
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
   src/core/charts/ChartDatabase.cpp
   src/core/osm/OsmMerge.cpp
   src/core/osm/Overpass.cpp
+  src/core/osm/OnlineOsm.cpp
 )
 
 # Core and UI are shared libraries so that plugins share the application's
@@ -115,6 +117,7 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/TidesPage.cpp
   src/ui/OfflinePage.cpp
   src/ui/RoutePlanPanel.cpp
+  src/ui/PassagePanel.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp

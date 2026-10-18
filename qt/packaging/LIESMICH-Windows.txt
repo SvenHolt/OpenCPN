@@ -27,7 +27,10 @@ Zum Ausprobieren
 * "Routen": Start- und Zielhafen eingeben (oder Rechtsklick auf die Karte
   "Route von hier"/"Route hierher"), "Route planen", dann "Speichern und
   navigieren". Die Route führt übers Wasser; Tiefen werden nicht
-  berücksichtigt.
+  berücksichtigt. Darunter die Törnplanung: Abfahrt, Zeitfenster,
+  Segeln/Motor, Wind (GRIB oder manuell) -> Dauer, Ankunft, Segelanteil,
+  Wenden, Diesel und Etappen. Mit Internet werden Häfen beim Verschieben
+  der Karte und bei der Suche automatisch online nachgeladen.
 * "Offline" -> "Bereich auf Karte wählen": Rahmen an Ecken/Kanten ziehen,
   Namen eingeben, "Laden". Häfen, Marinas, Tankstellen und Seezeichen aus
   OpenStreetMap erscheinen dann auf der Karte, die Offline-Suche findet

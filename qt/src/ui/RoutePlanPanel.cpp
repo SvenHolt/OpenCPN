@@ -17,11 +17,13 @@
 #include "core/AppSettings.h"
 #include "core/GeoMath.h"
 #include "core/NavStore.h"
+#include "core/osm/OnlineOsm.h"
 #include "core/osm/Overpass.h"
 #include "ui/ChartView.h"
 #include "ui/DrawerPages.h"
 #include "ui/GlassPanel.h"
 #include "ui/Icons.h"
+#include "ui/PassagePanel.h"
 #include "ui/Theme.h"
 
 namespace {
@@ -67,13 +69,6 @@ GeoBox geoBoxOf(const QRectF& mercator) {
   return GeoBox{south, west, north, east};
 }
 
-QString durationText(double hours) {
-  const int mins = int(std::round(hours * 60));
-  if (mins < 60) return QObject::tr("%1 min").arg(mins);
-  return QStringLiteral("%1 h %2 min")
-      .arg(mins / 60)
-      .arg(mins % 60, 2, 10, QChar('0'));
-}
 }  // namespace
 
 // --------------------------------------------------------------------------
@@ -88,9 +83,27 @@ void PlannedRouteLayer::paint(QPainter& p, const ChartView& view) {
   glow.setAlpha(60);
   p.setPen(QPen(glow, 10, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
   p.drawPolyline(line);
-  p.setPen(
-      QPen(pal.accentBright, 3, Qt::DashLine, Qt::RoundCap, Qt::RoundJoin));
-  p.drawPolyline(line);
+  // Legs colored by how they are sailed (passage plan), else accent.
+  for (int i = 1; i < line.size(); ++i) {
+    QColor c = pal.accentBright;
+    if (i - 1 < m_modes.size()) {
+      switch (PassageLeg::Mode(m_modes[i - 1])) {
+        case PassageLeg::Mode::Beat:
+          c = pal.warning;
+          break;
+        case PassageLeg::Mode::Run:
+          c = pal.success;
+          break;
+        case PassageLeg::Mode::Motor:
+          c = pal.textDim;
+          break;
+        default:
+          break;
+      }
+    }
+    p.setPen(QPen(c, 3.5, Qt::DashLine, Qt::RoundCap, Qt::RoundJoin));
+    p.drawLine(line[i - 1], line[i]);
+  }
   for (int i = 0; i < line.size(); ++i) {
     const bool end = i == 0 || i == line.size() - 1;
     p.setPen(QPen(Qt::white, 2));
@@ -172,40 +185,83 @@ void PlaceField::search() {
         (text.isEmpty() || w.name.contains(text, Qt::CaseInsensitive)))
       if (places.size() < 6)
         places << Place{w.name, "mark", w.lat, w.lon, true};
-  showSuggestions(places);
+  m_results = places;
+  showSuggestions(m_results);
+  if (text.size() < 2) return;
+  QPointer<PlaceField> self(this);
+  // Adds results of one source, without duplicates of earlier ones.
+  const auto merge = [self, id](const QVector<Place>& more) {
+    if (!self || id != self->m_searchId) return;
+    for (const Place& p : more) {
+      bool dup = false;
+      for (const Place& q : self->m_results)
+        dup |= q.name == p.name &&
+               geo::distanceNm(q.lat, q.lon, p.lat, p.lon) < 0.5;
+      if (!dup && self->m_results.size() < 16) self->m_results << p;
+    }
+    self->showSuggestions(self->m_results);
+  };
 
   // Harbours, marinas and towns from the offline OSM regions.
   auto& svc = OverpassService::instance();
   const GeoBox box = regionsBox();
-  if (text.size() < 2 || !box.isValid() || !svc.databaseReady()) return;
-  const QString re = qlRegex(text);
-  const QString q =
-      QStringLiteral(
-          "[out:json][timeout:15][bbox:%1];("
-          "nwr[\"leisure\"=\"marina\"][\"name\"~\"%2\",i];"
-          "nwr[\"seamark:type\"=\"harbour\"][\"name\"~\"%2\",i];"
-          "nwr[\"seamark:type\"=\"harbour\"][\"seamark:name\"~\"%2\",i];"
-          "nwr[\"harbour\"=\"yes\"][\"name\"~\"%2\",i];"
-          "nwr[\"seamark:type\"=\"anchorage\"][\"name\"~\"%2\",i];"
-          "node[\"place\"~\"^(city|town|village|suburb)$\"][\"name\"~\"%2\",i];"
-          ");out center tags 25;")
-          .arg(box.overpassBbox(), re);
-  QPointer<PlaceField> self(this);
-  svc.query(q, [self, id, places](const QByteArray& out, const QString& err) {
-    if (!self || id != self->m_searchId || !err.isEmpty()) return;
-    QVector<Place> all = places;
-    QSet<QString> seen;
-    for (const OsmElement& e : OverpassService::parseJson(out)) {
-      QString name = e.name();
-      if (name.isEmpty()) name = e.tags.value("seamark:name");
-      if (name.isEmpty() || seen.contains(name)) continue;
-      seen.insert(name);
-      const bool town = e.tags.contains("place");
-      all << Place{name, town ? "place" : "harbour", e.lat, e.lon, true};
-      if (all.size() >= 12) break;
-    }
-    self->showSuggestions(all);
-  });
+  if (box.isValid() && svc.databaseReady()) {
+    const QString re = qlRegex(text);
+    const QString q =
+        QStringLiteral(
+            "[out:json][timeout:15][bbox:%1];("
+            "nwr[\"leisure\"=\"marina\"][\"name\"~\"%2\",i];"
+            "nwr[\"seamark:type\"=\"harbour\"][\"name\"~\"%2\",i];"
+            "nwr[\"seamark:type\"=\"harbour\"][\"seamark:name\"~\"%2\",i];"
+            "nwr[\"harbour\"=\"yes\"][\"name\"~\"%2\",i];"
+            "nwr[\"seamark:type\"=\"anchorage\"][\"name\"~\"%2\",i];"
+            "node[\"place\"~\"^(city|town|village|suburb)$\"][\"name\"~"
+            "\"%2\",i];"
+            ");out center tags 25;")
+            .arg(box.overpassBbox(), re);
+    svc.query(q, [merge](const QByteArray& out, const QString& err) {
+      if (!err.isEmpty()) return;
+      QVector<Place> found;
+      for (const OsmElement& e : OverpassService::parseJson(out)) {
+        QString name = e.name();
+        if (name.isEmpty()) name = e.tags.value("seamark:name");
+        if (name.isEmpty()) continue;
+        const bool town = e.tags.contains("place");
+        found << Place{name,  town ? "place" : "harbour",
+                       e.lat, e.lon,
+                       true,  tr("offline")};
+      }
+      merge(found);
+    });
+  }
+
+  // Online: Nominatim finds harbours, marinas and places worldwide,
+  // preferring those near the chart.
+  const QPointF near = m_near ? m_near() : QPointF();
+  OnlineOsm::instance().searchPlaces(
+      text, near.y(), near.x(), [merge](const QVector<OsmElement>& elements) {
+        QVector<Place> found;
+        for (const OsmElement& e : elements) {
+          const bool harbour = e.tags.value("leisure") == "marina" ||
+                               e.tags.contains("harbour") ||
+                               e.tags.value("seamark:type") == "harbour" ||
+                               e.tags.value("waterway") == "dock";
+          const bool place =
+              e.tags.contains("place") || e.tags.contains("boundary");
+          // Region, e.g. "Laboe, Kreis Plön".
+          const QStringList parts = e.tags.value("display_name").split(", ");
+          found << Place{
+              e.name(), harbour ? "harbour" : place ? "place" : "mark",
+              e.lat,    e.lon,
+              true,     parts.mid(1, 2).join(", ")};
+        }
+        // Harbours first.
+        std::stable_sort(found.begin(), found.end(),
+                         [](const Place& a, const Place& b) {
+                           return (a.kind == "harbour") > (b.kind == "harbour");
+                         });
+        merge(found);
+      });
 }
 
 void PlaceField::showSuggestions(const QVector<Place>& places) {
@@ -224,9 +280,17 @@ void PlaceField::showSuggestions(const QVector<Place>& places) {
     auto* icon = new QLabel;
     icon->setPixmap(Icons::pixmap(kindIcon(p.kind), pal.accent, 18));
     l->addWidget(icon);
+    auto* col = new QVBoxLayout;
+    col->setSpacing(0);
     auto* name = label(p.name, "value");
     name->setTextFormat(Qt::PlainText);
-    l->addWidget(name, 1);
+    col->addWidget(name);
+    if (!p.detail.isEmpty()) {
+      auto* detail = label(p.detail, "dim");
+      detail->setTextFormat(Qt::PlainText);
+      col->addWidget(detail);
+    }
+    l->addLayout(col, 1);
     connect(row, &ListRow::clicked, this, [this, p] { setPlace(p); });
     m_list->addWidget(row);
   }
@@ -251,6 +315,13 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
   col->setSpacing(6);
   m_from = new PlaceField("locate", tr("From: harbour, marina, mark…"));
   m_to = new PlaceField("flag", tr("To: harbour, marina, mark…"));
+  const auto near = [chart] {
+    double lat, lon;
+    chart->center(lat, lon);
+    return QPointF(lon, lat);
+  };
+  m_from->setNearProvider(near);
+  m_to->setNearProvider(near);
   col->addWidget(m_from);
   col->addWidget(m_to);
   fields->addLayout(col, 1);
@@ -263,25 +334,12 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
   fields->addWidget(swap, 0, Qt::AlignTop);
   l->addLayout(fields);
 
-  auto* row = new QHBoxLayout;
-  row->addWidget(label(tr("Speed"), "dim"));
-  m_speed = new QDoubleSpinBox;
-  m_speed->setRange(1, 40);
-  m_speed->setDecimals(1);
-  m_speed->setSuffix(tr(" kn"));
-  m_speed->setValue(QSettings().value("Routes/planSpeed", 6.0).toDouble());
-  connect(m_speed, &QDoubleSpinBox::valueChanged, this, [this](double v) {
-    QSettings().setValue("Routes/planSpeed", v);
-    if (m_plan.ok()) finished();
-  });
-  row->addWidget(m_speed);
   m_calc = new QPushButton(tr("Plan route"));
   m_calc->setProperty("role", "primary");
   m_calc->setIcon(Icons::icon("route", Qt::white, 18));
   m_calc->setCursor(Qt::PointingHandCursor);
   connect(m_calc, &QPushButton::clicked, this, &RoutePlanPanel::calculate);
-  row->addWidget(m_calc, 1);
-  l->addLayout(row);
+  l->addWidget(m_calc);
 
   m_result = label(QString(), "dim");
   m_result->setWordWrap(true);
@@ -305,6 +363,14 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
   connect(go, &QPushButton::clicked, this, [this] { save(true); });
   connect(discard, &QPushButton::clicked, this, &RoutePlanPanel::clearResult);
   m_actions->hide();
+
+  m_passage = new PassagePanel;
+  connect(m_passage, &PassagePanel::planChanged, this, [this] {
+    QVector<int> modes;
+    for (const PassageLeg& leg : m_passage->plan().legs) modes << int(leg.mode);
+    m_layer->setLegModes(modes);
+  });
+  l->addWidget(m_passage);
   l->addWidget(m_actions);
 
   const auto update = [this] {
@@ -324,6 +390,7 @@ void RoutePlanPanel::setTo(const Place& p) { m_to->setPlace(p); }
 void RoutePlanPanel::clearResult() {
   m_plan = {};
   m_layer->setPoints({});
+  m_passage->setRoute({});
   m_result->hide();
   m_actions->hide();
 }
@@ -359,11 +426,19 @@ void RoutePlanPanel::calculate() {
       covered << QRectF(geo::toMercator(r.box.north, r.box.west),
                         geo::toMercator(r.box.south, r.box.east))
                      .normalized();
-  if (covered.isEmpty() || !svc.databaseReady()) {
+  // Without offline data, the coastline comes from the public servers
+  // (when connected and the area is not too large).
+  auto& online = OnlineOsm::instance();
+  const bool useOnline = !online.coveredOffline(area) && online.isEnabled() &&
+                         online.isOnline() && area.areaDeg2() < 4.0;
+  if (useOnline)
+    covered = {RoutePlanner::searchArea(a.lat, a.lon, b.lat, b.lon)};
+  if (covered.isEmpty() || (!svc.databaseReady() && !useOnline)) {
     run(req);
     return;
   }
   m_osmPending = true;
+  m_calc->setText(useOnline ? tr("Loading coastline…") : tr("Calculating…"));
   const QString q = QStringLiteral(
                         "[out:json][timeout:60][bbox:%1];("
                         "way[\"natural\"=\"coastline\"];"
@@ -371,10 +446,11 @@ void RoutePlanPanel::calculate() {
                         ");out geom;")
                         .arg(area.overpassBbox());
   QPointer<RoutePlanPanel> self(this);
-  svc.query(q, [self, req, covered, run](const QByteArray& out,
-                                         const QString& err) mutable {
+  const auto handle = [self, req, covered, run](const QByteArray& out,
+                                                const QString& err) mutable {
     if (!self) return;
     self->m_osmPending = false;
+    self->m_calc->setText(tr("Calculating…"));
     if (err.isEmpty()) {
       for (const OsmElement& e : OverpassService::parseJson(out)) {
         if (e.geometry.size() < 2) continue;
@@ -390,7 +466,11 @@ void RoutePlanPanel::calculate() {
       if (!req.coastlines.isEmpty()) req.landIgnored = covered;
     }
     run(req);
-  });
+  };
+  if (useOnline)
+    online.queryArea(area, q, handle);
+  else
+    svc.query(q, handle);
 }
 
 void RoutePlanPanel::finished() {
@@ -405,15 +485,12 @@ void RoutePlanPanel::finished() {
     m_actions->hide();
     return;
   }
-  const double hours = m_plan.lengthNm / std::max(0.5, m_speed->value());
   m_result->setText(
-      tr("%1 · %2 at %3 · %n waypoint(s)", nullptr, int(m_plan.points.size()))
-          .arg(AppSettings::instance().distanceText(m_plan.lengthNm),
-               durationText(hours),
-               AppSettings::instance().speedText(m_speed->value())));
+      tr("%1 · %n waypoint(s)", nullptr, int(m_plan.points.size()))
+          .arg(AppSettings::instance().distanceText(m_plan.lengthNm)));
   m_actions->show();
-  if (sender() != &m_watcher) return;  // only the speed changed
   m_layer->setPoints(m_plan.points);
+  m_passage->setRoute(m_plan.points);
   double s = 90, w = 180, n = -90, e = -180;
   for (const QPointF& p : m_plan.points) {
     s = std::min(s, p.y());
@@ -439,6 +516,19 @@ void RoutePlanPanel::save(bool navigate) {
       w.name = b.name;
     else
       w.name = QStringLiteral("WP%1").arg(i, 2, 10, QChar('0'));
+    // Passage plan: ETA and how the following leg is sailed.
+    const auto& legs = m_passage->plan().legs;
+    if (i > 0 && i - 1 < legs.size())
+      w.time = legs[i - 1].end;
+    else if (i == 0 && !legs.isEmpty())
+      w.time = legs[0].start;
+    if (i < legs.size())
+      w.description =
+          tr("ETD %1 · %2 · %3° · wind %4 kn")
+              .arg(legs[i].start.toLocalTime().toString("ddd HH:mm"),
+                   PassagePanel::modeName(legs[i].mode))
+              .arg(int(std::round(legs[i].courseDeg)))
+              .arg(int(std::round(legs[i].windKn)));
     r.points << w;
   }
   const QString id = NavStore::instance().addRoute(r);

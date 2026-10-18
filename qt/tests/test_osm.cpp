@@ -5,6 +5,8 @@
 #include <QtTest>
 
 #include "core/GeoMath.h"
+#include "core/PassagePlanner.h"
+#include "core/osm/OnlineOsm.h"
 #include "core/RoutePlanner.h"
 #include "core/osm/OsmMerge.h"
 #include "core/osm/Overpass.h"
@@ -219,6 +221,161 @@ private slots:
         QVERIFY(leg.intersects(QLineF(walls[k - 1], walls[k]), nullptr) !=
                 QLineF::BoundedIntersection);
     }
+  }
+
+  void passageReachingAndBeating() {
+    // 10 nm due north.
+    const QVector<QPointF> route{{10.0, 54.0}, {10.0, 54.0 + 10.0 / 60}};
+    PassageSettings s;
+    s.departure = QDateTime(QDate(2026, 6, 21), QTime(8, 0), Qt::UTC);
+    s.manualWindFromDeg = 270;  // beam reach
+    s.manualWindKn = 14;
+    PassagePlan p = PassagePlanner::plan(route, s, {});
+    QCOMPARE(p.legs.size(), 1);
+    QCOMPARE(p.legs[0].mode, PassageLeg::Mode::Sail);
+    QCOMPARE(p.tacks, 0);
+    QVERIFY(std::fabs(p.distanceNm - 10) < 0.05);
+    QVERIFY(std::fabs(p.sailedNm - p.distanceNm) < 1e-9);
+    QVERIFY(p.hours > 10 / s.hullSpeedKn && p.hours < 10 / 4.0);
+    QCOMPARE(p.motorHours, 0.0);
+    QVERIFY(p.manualUsed && !p.gribUsed);
+    QVERIFY(std::abs(p.departure.secsTo(p.arrival) - p.hours * 3600) < 5);
+
+    // Dead upwind: beating with tacks and a longer sailed distance.
+    s.manualWindFromDeg = 0;
+    const PassagePlan up = PassagePlanner::plan(route, s, {});
+    QCOMPARE(up.legs[0].mode, PassageLeg::Mode::Beat);
+    QVERIFY(up.tacks >= 3);
+    // On ±45° boards the distance grows by sqrt(2).
+    QVERIFY(std::fabs(up.sailedNm - 10 * std::sqrt(2.0)) < 0.1);
+    QVERIFY(up.hours > p.hours);
+
+    // Dead downwind: gybing.
+    s.manualWindFromDeg = 180;
+    const PassagePlan down = PassagePlanner::plan(route, s, {});
+    QCOMPARE(down.legs[0].mode, PassageLeg::Mode::Run);
+    QVERIFY(down.gybes >= 1);
+
+    // Calm: motor, fuel used.
+    s.manualWindKn = 2;
+    const PassagePlan calm = PassagePlanner::plan(route, s, {});
+    QCOMPARE(calm.legs[0].mode, PassageLeg::Mode::Motor);
+    QVERIFY(std::fabs(calm.hours - 10 / s.motorSpeedKn) < 0.01);
+    QVERIFY(std::fabs(calm.fuelLiters - calm.hours * s.fuelLph) < 1e-9);
+    QCOMPARE(calm.sailShare(), 0.0);
+
+    // Motor sailing upwind: the engine is faster than beating.
+    s.manualWindKn = 14;
+    s.manualWindFromDeg = 0;
+    s.strategy = PassageSettings::Strategy::MotorSail;
+    const PassagePlan ms = PassagePlanner::plan(route, s, {});
+    QCOMPARE(ms.legs[0].mode, PassageLeg::Mode::Motor);
+    QVERIFY(ms.hours < up.hours);
+  }
+
+  void passageWindowAndGribWind() {
+    const QVector<QPointF> route{{10.0, 54.0}, {10.0, 54.0 + 12.0 / 60}};
+    const QDateTime t0(QDate(2026, 6, 21), QTime(6, 0), Qt::UTC);
+    // Wind veers from north (headwind) to west (beam) during the day.
+    const WindSource wind = [t0](double, double, const QDateTime& t, double& kn,
+                                 double& from) {
+      const double h = t0.secsTo(t) / 3600.0;
+      from = std::fmod(360 - std::min(90.0, h * 15), 360);
+      kn = 14;
+      return h < 30;
+    };
+    PassageSettings s;
+    s.departure = t0;
+    s.latestDeparture = t0.addSecs(12 * 3600);
+    s.windowStepMin = 60;
+    QVector<DepartureOption> options;
+    const PassagePlan best =
+        PassagePlanner::planWindow(route, s, wind, &options);
+    QCOMPARE(options.size(), 13);
+    QVERIFY(best.gribUsed);
+    int bestCount = 0;
+    for (const auto& o : options) {
+      bestCount += o.best;
+      QVERIFY(o.hours >= best.hours - 1e-9);
+    }
+    QCOMPARE(bestCount, 1);
+    // Leaving later, with beam wind, is faster than beating at once.
+    QVERIFY(best.departure > t0);
+    QVERIFY(best.tacks == 0);
+    QVERIFY(options.first().tacks > 0);
+  }
+
+  void sunTimes() {
+    // Kiel, midsummer: sunrise about 02:5x UTC, sunset about 19:5x UTC.
+    QDateTime rise, set;
+    PassagePlanner::sunTimes(54.32, 10.14, QDate(2026, 6, 21), rise, set);
+    QVERIFY(rise.isValid() && set.isValid());
+    QCOMPARE(rise.time().hour(), 2);
+    QVERIFY(rise.time().minute() >= 40);
+    QCOMPARE(set.time().hour(), 19);
+    QVERIFY(set.time().minute() >= 45);
+    // Midwinter at 75° N: polar night.
+    PassagePlanner::sunTimes(75, 10, QDate(2026, 12, 21), rise, set);
+    QVERIFY(!rise.isValid());
+    // Night hours for a passage across midnight.
+    const QVector<QPointF> route{{10.0, 54.0}, {10.0, 54.5}};
+    PassageSettings s;
+    s.departure = QDateTime(QDate(2026, 6, 21), QTime(18, 0), Qt::UTC);
+    s.manualWindFromDeg = 270;
+    s.manualWindKn = 14;
+    const PassagePlan p = PassagePlanner::plan(route, s, {});
+    QVERIFY(p.nightHours > 1);
+    QVERIFY(p.warnings.join(' ').contains("darkness"));
+  }
+
+  void onlineHelpers() {
+    const QStringList tiles =
+        OnlineOsm::tilesFor(GeoBox{54.32, 10.14, 54.41, 10.25});
+    QCOMPARE(tiles, (QStringList{"543_101", "543_102", "544_101", "544_102"}));
+    const GeoBox b = OnlineOsm::tileBox("543_101");
+    QVERIFY(std::fabs(b.south - 54.3) < 1e-9 &&
+            std::fabs(b.east - 10.2) < 1e-9);
+    const auto places = OnlineOsm::parseNominatim(
+        R"([{"osm_type":"way","osm_id":171345679,"lat":"54.4020637",
+             "lon":"10.2162286","category":"leisure","type":"marina",
+             "name":"Yachthafen Laboe",
+             "display_name":"Yachthafen Laboe, Börn, Laboe, Kreis Plön"}])");
+    QCOMPARE(places.size(), 1);
+    QCOMPARE(places[0].name(), QStringLiteral("Yachthafen Laboe"));
+    QCOMPARE(places[0].tags.value("leisure"), QStringLiteral("marina"));
+    QVERIFY(std::fabs(places[0].lat - 54.4020637) < 1e-9);
+  }
+
+  /** Online harbour data (public Overpass mirrors and Nominatim). */
+  void onlineHarbours() {
+    if (qEnvironmentVariable("OCPN_QT_NETWORK_TESTS") != "1")
+      QSKIP("set OCPN_QT_NETWORK_TESTS=1 to query the public servers");
+    auto& online = OnlineOsm::instance();
+    online.setEnabled(true);
+    QByteArray result;
+    QString error;
+    bool done = false;
+    online.query(
+        "[out:json][bbox:54.30,10.10,54.40,10.20];"
+        "nwr[\"leisure\"=\"marina\"];out center tags;",
+        [&](const QByteArray& out, const QString& err) {
+          result = out;
+          error = err;
+          done = true;
+        });
+    QVERIFY(QTest::qWaitFor([&] { return done; }, 120000));
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QVERIFY(OverpassService::parseJson(result).size() >= 3);
+    QVector<OsmElement> found;
+    done = false;
+    online.searchPlaces("Yachthafen Laboe", 54.4, 10.2,
+                        [&](const QVector<OsmElement>& e) {
+                          found = e;
+                          done = true;
+                        });
+    QVERIFY(QTest::qWaitFor([&] { return done; }, 30000));
+    QVERIFY(!found.isEmpty());
+    QVERIFY(std::fabs(found[0].lat - 54.40) < 0.05);
   }
 
   void localImportAndQuery() {

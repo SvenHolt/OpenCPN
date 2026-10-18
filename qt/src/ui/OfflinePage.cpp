@@ -14,6 +14,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QVBoxLayout>
@@ -21,6 +22,7 @@
 
 #include "core/AppSettings.h"
 #include "core/NavStore.h"
+#include "core/osm/OnlineOsm.h"
 #include "ui/ChartView.h"
 #include "ui/DrawerPages.h"
 #include "ui/Icons.h"
@@ -175,19 +177,26 @@ OsmPoiLayer::OsmPoiLayer(ChartView* chart, QObject* parent)
     m_debounce.start();
   });
   connect(this, &MapLayer::changed, &m_debounce, qOverload<>(&QTimer::start));
+  connect(&OnlineOsm::instance(), &OnlineOsm::tileLoaded, this, [this] {
+    m_loaded = {};
+    m_debounce.start(150);
+  });
   m_debounce.start();
 }
 
 QString OsmPoiLayer::queryFor(const GeoBox& box) {
+  return queryTemplate().arg(box.overpassBbox());
+}
+
+QString OsmPoiLayer::queryTemplate() {
   return QStringLiteral(
-             "[out:json][timeout:25][bbox:%1];"
-             "(nwr[\"leisure\"~\"^(marina|slipway)$\"];"
-             "nwr[\"seamark:type\"];"
-             "nwr[\"waterway\"=\"fuel\"];"
-             "nwr[\"amenity\"=\"fuel\"][\"boat\"=\"yes\"];"
-             "nwr[\"harbour\"=\"yes\"];);"
-             "out center tags 3000;")
-      .arg(box.overpassBbox());
+      "[out:json][timeout:25][bbox:%1];"
+      "(nwr[\"leisure\"~\"^(marina|slipway)$\"];"
+      "nwr[\"seamark:type\"];"
+      "nwr[\"waterway\"=\"fuel\"];"
+      "nwr[\"amenity\"=\"fuel\"][\"boat\"=\"yes\"];"
+      "nwr[\"harbour\"=\"yes\"];);"
+      "out center tags 3000;");
 }
 
 OsmPoiLayer::Kind OsmPoiLayer::classify(const OsmElement& e) {
@@ -210,28 +219,54 @@ OsmPoiLayer::Kind OsmPoiLayer::classify(const OsmElement& e) {
 }
 
 void OsmPoiLayer::refresh() {
-  if (!isEnabled() || OverpassService::instance().regions().isEmpty()) {
-    if (!m_elements.isEmpty()) {
-      m_elements.clear();
-      m_chart->update();
-    }
-    return;
-  }
+  const auto clear = [this] {
+    if (m_elements.isEmpty()) return;
+    m_elements.clear();
+    m_loaded = {};
+    m_chart->update();
+  };
+  if (!isEnabled()) return clear();
   // Only zoomed in: a harbour scale view covers well below one degree.
   const GeoBox visible = m_chart->visibleArea();
-  if (visible.areaDeg2() > 1.0) {
-    if (!m_elements.isEmpty()) {
-      m_elements.clear();
-      m_loaded = {};
-      m_chart->update();
+  if (!visible.isValid() || visible.areaDeg2() > 1.0) return clear();
+
+  auto& online = OnlineOsm::instance();
+  auto& svc = OverpassService::instance();
+  bool localData = false;
+  for (const auto& r : svc.regions()) localData |= r.box.intersects(visible);
+  localData &= svc.databaseReady();
+
+  // Without (complete) offline data: tiles from the public servers,
+  // loaded while panning and cached on disk.
+  QVector<OsmElement> tileElements;
+  if (!online.coveredOffline(visible) && online.isEnabled()) {
+    const QStringList keys = OnlineOsm::tilesFor(visible);
+    if (keys.size() <= 16) {
+      QStringList missing;
+      for (const QString& k : keys) {
+        QVector<OsmElement> e;
+        if (online.tile(k, &e))
+          tileElements += e;
+        else
+          missing << k;
+      }
+      if (!missing.isEmpty()) online.requestTiles(missing, queryTemplate());
     }
+  }
+
+  if (!localData) {
+    m_elements = tileElements;
+    m_loaded = {};
+    m_chart->update();
     return;
   }
+
   const auto inside = [](const GeoBox& outer, const GeoBox& b) {
     return b.south >= outer.south && b.north <= outer.north &&
            b.west >= outer.west && b.east <= outer.east;
   };
-  if (m_loaded.isValid() && inside(m_loaded, visible)) return;
+  if (m_loaded.isValid() && inside(m_loaded, visible) && tileElements.isEmpty())
+    return;
   if (m_running) {
     m_again = true;
     return;
@@ -242,29 +277,26 @@ void OsmPoiLayer::refresh() {
   const GeoBox box{
       std::max(-85.0, visible.south - mh), std::max(-180.0, visible.west - mw),
       std::min(85.0, visible.north + mh), std::min(180.0, visible.east + mw)};
-  bool covered = false;
-  for (const auto& r : OverpassService::instance().regions())
-    covered |= r.box.intersects(box);
-  if (!covered) {
-    m_elements.clear();
-    m_loaded = box;
-    m_chart->update();
-    return;
-  }
   m_running = true;
-  OverpassService::instance().query(
-      queryFor(box), [this, box](const QByteArray& out, const QString& err) {
-        m_running = false;
-        if (err.isEmpty()) {
-          m_elements = OverpassService::parseJson(out);
-          m_loaded = box;
-          m_chart->update();
-        }
-        if (m_again) {
-          m_again = false;
-          m_debounce.start();
-        }
-      });
+  svc.query(queryFor(box), [this, box, tileElements](const QByteArray& out,
+                                                     const QString& err) {
+    m_running = false;
+    if (err.isEmpty()) {
+      // Offline region data plus online tiles, without duplicates.
+      QVector<OsmElement> all = OverpassService::parseJson(out);
+      QSet<QString> seen;
+      for (const auto& e : all) seen.insert(e.type + QString::number(e.id));
+      for (const auto& e : tileElements)
+        if (!seen.contains(e.type + QString::number(e.id))) all << e;
+      m_elements = all;
+      m_loaded = box;
+      m_chart->update();
+    }
+    if (m_again) {
+      m_again = false;
+      m_debounce.start();
+    }
+  });
 }
 
 void OsmPoiLayer::paint(QPainter& p, const ChartView& view) {
@@ -457,6 +489,20 @@ OfflinePage::OfflinePage(ChartView* chart, OsmPoiLayer* layer, QWidget* parent)
   });
   showRow->addWidget(show);
   l->addLayout(showRow);
+  auto* onlineRow = new QHBoxLayout;
+  auto* onlineLabel =
+      label(tr("Load harbours online when connected (Overpass, Nominatim)"));
+  onlineLabel->setWordWrap(true);
+  onlineRow->addWidget(onlineLabel, 1);
+  auto* online = new ToggleSwitch;
+  online->setChecked(OnlineOsm::instance().isEnabled());
+  connect(online, &QAbstractButton::toggled, this, [this](bool on) {
+    OnlineOsm::instance().setEnabled(on);
+    m_layer->setEnabled(m_layer->isEnabled());
+    m_chart->update();
+  });
+  onlineRow->addWidget(online);
+  l->addLayout(onlineRow);
 
   // Backend settings, collapsed by default.
   auto* settingsBtn = new QPushButton(tr("Overpass settings"));

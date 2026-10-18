@@ -5,6 +5,7 @@
 #include <QFutureWatcher>
 #include <QTimer>
 #include <QWidget>
+#include <functional>
 
 #include "core/RoutePlanner.h"
 #include "ui/MapLayer.h"
@@ -15,12 +16,14 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QVBoxLayout;
+class PassagePanel;
 
 /** A start or destination: harbour, marina, mark or position. */
 struct Place {
   QString name, kind;
   double lat = 0, lon = 0;
   bool valid = false;
+  QString detail;  // e.g. the region of an online result
 };
 
 /** Dashed preview of the calculated route. */
@@ -33,11 +36,18 @@ public:
   int zOrder() const override { return -1; }
   void setPoints(const QVector<QPointF>& lonLat) {
     m_points = lonLat;
+    m_modes.clear();
+    emit changed();
+  }
+  /** PassageLeg::Mode per leg, for coloring. */
+  void setLegModes(const QVector<int>& modes) {
+    m_modes = modes;
     emit changed();
   }
 
 private:
   QVector<QPointF> m_points;
+  QVector<int> m_modes;
 };
 
 /** Search field with suggestions for a Place. */
@@ -48,6 +58,8 @@ public:
              QWidget* parent = nullptr);
   Place place() const { return m_place; }
   void setPlace(const Place& p);
+  /** Where to look first (x = lon, y = lat), e.g. the chart center. */
+  void setNearProvider(std::function<QPointF()> f) { m_near = std::move(f); }
 
 signals:
   void placeChanged();
@@ -65,6 +77,8 @@ private:
   QTimer m_debounce;
   Place m_place;
   int m_searchId = 0;
+  QVector<Place> m_results;
+  std::function<QPointF()> m_near;
 };
 
 class RoutePlanPanel : public QWidget {
@@ -84,10 +98,10 @@ private:
   PlannedRouteLayer* m_layer;
   PlaceField* m_from;
   PlaceField* m_to;
-  QDoubleSpinBox* m_speed;
   QPushButton* m_calc;
   QLabel* m_result;
   QWidget* m_actions;
+  PassagePanel* m_passage;
   QFutureWatcher<RoutePlanResult> m_watcher;
   RoutePlanResult m_plan;
   bool m_osmPending = false;

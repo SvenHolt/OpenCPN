@@ -252,16 +252,23 @@ QSlider::handle:horizontal { background: white; width: 20px; height: 20px;
   margin: -7px 0; border-radius: 10px; }
 QPushButton[role="ghost"] { background: transparent; color: @dim; padding: 8px 10px; }
 QPushButton[role="ghost"]:hover { background: @hover; color: @text; }
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateTimeEdit {
   background: @hover; border: 1px solid transparent; border-radius: 10px;
   padding: 8px 10px; color: @text; selection-background-color: @accent;
 }
-QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus,
+QDateTimeEdit:focus {
   border: 1px solid @accent;
 }
 QSpinBox::up-button, QSpinBox::down-button,
 QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 0; border: none; }
-QComboBox::drop-down { border: none; width: 26px; }
+QComboBox::drop-down, QDateTimeEdit::drop-down { border: none; width: 26px; }
+QDateTimeEdit::down-arrow { image: url(@chevron); width: 14px; height: 14px; }
+QCalendarWidget QWidget { background: @panelSolid; color: @text;
+  alternate-background-color: @hover; }
+QCalendarWidget QToolButton { background: transparent; color: @text; padding: 6px; }
+QCalendarWidget QAbstractItemView:disabled { color: @faint; }
+QCalendarWidget QAbstractItemView { selection-background-color: @accent; }
 QComboBox::down-arrow { image: url(@chevron); width: 14px; height: 14px; }
 QComboBox QAbstractItemView {
   background: @panelSolid; border: 1px solid @border; border-radius: 10px;

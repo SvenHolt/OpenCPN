@@ -26,8 +26,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![ENC](doc/screenshot-enc.png) | ![Wetter](doc/screenshot-weather.png) |
 | **Gezeiten · Tag** | **Aktive Route · Nacht** |
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
-| **Routenplanung von Hafen zu Hafen** | |
-| ![Routenplanung](doc/screenshot-route-planning.png) | |
+| **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
+| ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
 | **Kartenausschnitt für Offline-Daten wählen** | **Offline-Gebiete · lokale Overpass-Instanz** |
 | ![Auswahl](doc/screenshot-offline-select.png) | ![Offline](doc/screenshot-offline.png) |
 
@@ -53,6 +53,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | AIS: Typen 1/2/3, 5, 18, 19, 24; CPA/TCPA und Kollisionsalarm | ✅ |
 | Datenquellen: UDP, TCP, seriell, Simulator; Datenmonitor | ✅ |
 | **Routenplanung von Hafen zu Hafen** (automatisch über Wasser, Land und Molen werden umfahren) | ✅ |
+| **Törnplanung**: Zeitfenster, Segel-/Motoranteil, Wenden/Halsen, Dauer, Ankunft, Diesel, Tageslicht (GRIB-Wind) | ✅ |
+| **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
 | GPX-Import/-Export (auch OpenCPN `navobj.xml`) | ✅ |
 | S-63 (verschlüsselte ENC), CM93 | ❌ siehe Grenzen |
@@ -188,11 +190,64 @@ So rechnet der Planer:
 * Liegen Start oder Ziel an Land (z. B. die Mitte einer Marina), wird die
   nächste erreichbare Wasserfläche gewählt.
 
+#### Törnplanung
+
+Nach der Berechnung zeigt der Bereich **Törn**:
+
+* **Abfahrt** und **Zeitfenster** (nur diese Zeit oder die nächsten
+  6/12/24/48/72 Stunden). Im Fenster rechnet die App jede halbe bis
+  zwei Stunden eine Abfahrt durch und wählt die beste nach **schnellster
+  Fahrt**, **meistem Segeln** oder **Tageslicht**. Die Zeitleiste zeigt
+  alle Abfahrten: Höhe = Dauer, Blau = Segelanteil, dunkel = Nachtanteil.
+  Ein Tipp auf einen Balken wählt diese Abfahrt.
+* **Antrieb:** Segeln (Motor nur bei Flaute oder zu wenig Fahrt),
+  Motorsegeln (jeweils das Schnellere) oder Motor. Voreinstellung ist die
+  Antriebsart der Segelkonfiguration.
+* **Wind** aus der geladenen **GRIB-Vorhersage**, entlang der Route und in
+  der Zeit interpoliert. Ohne GRIB oder außerhalb davon gilt der manuell
+  eingegebene Wind; vorbelegt wird der aktuelle wahre Wind der Instrumente.
+* **Ergebnis:** Dauer, Ankunft, Segel-/Motoranteil, Wenden und Halsen,
+  gesegelte Distanz (mit Kreuzschlägen), Diesel (Verbrauch aus der
+  Motoreinstellung), Nachtstunden, Sonnenuntergang am Ziel.
+* **Warnungen:** Starkwind ab 25 kn, Sturm ab 30 kn, Ankunft im Dunkeln,
+  GRIB deckt den Törn nicht ganz ab, Diesel wird knapp.
+* **Etappen:** Kurs, Distanz, Fahrmodus (Segeln, Kreuzen, Vorwind,
+  Motor), Wenden/Halsen, Zeiten, Wind und TWA. Auf der Karte ist jede
+  Etappe nach Fahrmodus eingefärbt.
+
+So wird gerechnet: Die Bootsgeschwindigkeit stammt aus einer einfachen
+Polare (beste Fahrt unter Segeln einstellbar, skaliert mit der gesetzten
+Segelfläche und einem Leichtwindsegel). Gegen den Wind wird mit 45° zum
+wahren Wind gekreuzt, vor dem Wind ab 160° mit Halsen. Pro Schlaglänge von
+etwa 1,5 sm wird eine Wende gezählt. Der Wind wird alle 2 sm neu bestimmt.
+Beim Speichern erhalten die Wegpunkte ETA bzw. ETD und Fahrmodus.
+
 Tiefen, Fahrwasser, Sperrgebiete und Brücken werden dabei **nicht**
 berücksichtigt. Die Route ist ein Vorschlag und muss vor der Fahrt auf der
 Seekarte geprüft werden.
 
 Passen nicht alle Bereiche ins Dock, landen die hinteren unter **Mehr**.
+
+### Häfen online nachladen
+
+Mit Netzwerkverbindung (abschaltbar unter Offline → „Häfen online laden“):
+
+* **Karte:** Für den sichtbaren Ausschnitt lädt die App Häfen, Marinas,
+  Tankstellen, Slipanlagen, Ankerplätze und Seezeichen in Kacheln von
+  0,1° × 0,1° über öffentliche Overpass-Server nach, während man die Karte
+  verschiebt. Kacheln werden 14 Tage auf der Festplatte zwischengespeichert
+  und sind danach auch ohne Netz da.
+* **Server:** overpass-api.de, overpass.kumi.systems und
+  overpass.private.coffee (in den Einstellungen `Overpass/onlineServers`
+  änderbar). Antwortet einer nicht innerhalb von 6 s, wird parallel der
+  nächste gefragt, die erste gültige Antwort zählt. Ohne Verbindung wird
+  es nach einer Minute erneut versucht.
+* **Suche:** Start und Ziel findet die App zusätzlich über Nominatim
+  (OpenStreetMap-Ortssuche, höchstens eine Anfrage pro Sekunde, Ergebnisse
+  nahe der Karte zuerst).
+* **Routenplanung:** Ohne Offline-Gebiet holt sie die Küstenlinie und die
+  Molen für das Planungsgebiet online.
+* Offline-Gebiete der lokalen Overpass-Instanz haben immer Vorrang.
 
 ### Offline-Gebiete und lokale Overpass-Instanz
 
@@ -374,7 +429,9 @@ qt/
 │   ├── Tides              harmonische Gezeitenvorhersage
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
 │   ├── RoutePlanner       Routing über Wasser (Raster, A*, Begradigung)
-│   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge
+│   ├── PassagePlanner     Törnplanung (Polare, Kreuzen, Zeitfenster, Sonne)
+│   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge,
+│   │                      OnlineOsm (öffentliche Server, Kachel-Cache, Nominatim)
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
 ├── src/ui/                Widgets (libocpnqt_ui.so)
 │   ├── Theme, Icons, GlassPanel
@@ -384,6 +441,7 @@ qt/
 │   ├── TracksPage, TidesPage, WeatherPage
 │   ├── OfflinePage        Gebietsauswahl-Leiste, Offline-Seite, OSM-Ebene
 │   ├── RoutePlanPanel     Routenplanung von Hafen zu Hafen
+│   ├── PassagePanel       Törnplanung mit Zeitleiste und Etappen
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

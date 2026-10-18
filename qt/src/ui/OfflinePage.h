@@ -53,6 +53,8 @@ public:
 
   /** The Overpass QL query used for a bounding box. */
   static QString queryFor(const GeoBox& box);
+  /** The same with "%1" for the bounding box (online tiles). */
+  static QString queryTemplate();
   enum class Kind { Marina, Harbour, Anchorage, Fuel, Slipway, Seamark, Other };
   static Kind classify(const OsmElement& e);
   int elementCount() const { return int(m_elements.size()); }

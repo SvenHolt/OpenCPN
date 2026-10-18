@@ -138,6 +138,7 @@ ListPage::ListPage(QWidget* parent) : QWidget(parent) {
   auto* content = new QWidget;
   content->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
   auto* cl = new QVBoxLayout(content);
+  m_content = cl;
   cl->setContentsMargins(0, 0, 8, 0);
   cl->setSpacing(8);
   m_rows = new QVBoxLayout;
@@ -173,6 +174,10 @@ void ListPage::addRow(QWidget* row) {
   m_empty->hide();
 }
 
+void ListPage::setHeader(QWidget* header) {
+  m_content->insertWidget(0, header);
+}
+
 void ListPage::setEmptyText(const QString& text) { m_empty->setText(text); }
 
 // --------------------------------------------------------------------------
@@ -180,7 +185,13 @@ void ListPage::setEmptyText(const QString& text) { m_empty->setText(text); }
 RoutesPage::RoutesPage(ChartView* chart, QWidget* parent)
     : ListPage(parent), m_chart(chart) {
   m_planner = new RoutePlanPanel(chart);
-  actions()->addWidget(m_planner);
+  auto* header = new QWidget;
+  auto* hl = new QVBoxLayout(header);
+  hl->setContentsMargins(0, 0, 0, 0);
+  hl->setSpacing(10);
+  hl->addWidget(m_planner);
+  hl->addWidget(label(tr("SAVED ROUTES"), "section"));
+  setHeader(header);
   auto* io = new QHBoxLayout;
   auto* add = button(tr("Draw"), "edit");
   add->setToolTip(tr("Draw a route by tapping points on the chart"));

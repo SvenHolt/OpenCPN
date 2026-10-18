@@ -47,10 +47,13 @@ protected:
   void addRow(QWidget* row);
   void setEmptyText(const QString& text);
   QVBoxLayout* actions() const { return m_actions; }
+  /** A widget scrolling together with the list, above the rows. */
+  void setHeader(QWidget* header);
 
 private:
   QVBoxLayout* m_actions;
   QVBoxLayout* m_rows;
+  QVBoxLayout* m_content;
   QLabel* m_empty;
 };
 
