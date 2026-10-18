@@ -24,6 +24,8 @@ class BoatView;
 class RoutesPage;
 class LightScenesPage;
 class AutomationsPage;
+class RangePage;
+class ProvisionsPage;
 
 class MainWindow : public QWidget, public PluginHost {
   Q_OBJECT
@@ -56,6 +58,8 @@ public:
   int pageIndex(const QString& key) const;
   LightScenesPage* scenesPage() const { return m_scenesPage; }
   AutomationsPage* automationsPage() const { return m_automationsPage; }
+  RangePage* rangePage() const { return m_rangePage; }
+  ProvisionsPage* provisionsPage() const { return m_provisionsPage; }
 
 protected:
   void resizeEvent(QResizeEvent*) override;
@@ -92,6 +96,11 @@ private:
   LightScenesPage* m_scenesPage = nullptr;
   AutomationsPage* m_automationsPage = nullptr;
   QHash<QString, int> m_pageKeys;
+  int m_suppliesSection = -1;
+  int m_rangeSection = -1;
+  int m_provisionsSection = -1;
+  RangePage* m_rangePage = nullptr;
+  ProvisionsPage* m_provisionsPage = nullptr;
   CockpitView* m_cockpit;
   BoatView* m_boat;
   View m_view = View::Chart;

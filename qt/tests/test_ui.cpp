@@ -14,6 +14,9 @@
 #include "ui/OfflinePage.h"
 #include "core/BoatSystems.h"
 #include "ui/BoatPages.h"
+#include "ui/SupplyPages.h"
+#include "core/Provisions.h"
+#include "core/Range.h"
 #include "ui/BoatView.h"
 #include "ui/Overlays.h"
 #include "core/Automation.h"
@@ -283,9 +286,9 @@ private slots:
     QVERIFY(dock);
     QStringList labels;
     for (auto* b : dock->findChildren<DockButton*>()) labels << b->text();
-    const QStringList main = {tr("Settings"), tr("Routes"), tr("Marks"),
-                              tr("Tracks"),   tr("AIS"),    tr("Tides"),
-                              tr("Weather")};
+    const QStringList main = {tr("Settings"), tr("Routes"),  tr("Marks"),
+                              tr("Tracks"),   tr("AIS"),     tr("Tides"),
+                              tr("Weather"),  tr("Supplies")};
     int last = -1;
     for (const QString& m : main) {
       const int i = int(labels.indexOf(m));
@@ -301,8 +304,10 @@ private slots:
     const int settings = m_win->pageIndex("settings");
     QCOMPARE(settings, 0);
     drawer->open(settings);
-    auto* hub = m_win->findChild<SettingsHub*>();
-    QVERIFY(hub && hub->isVisible());
+    SettingsHub* hub = nullptr;  // settings and supplies use hubs
+    for (auto* h : m_win->findChildren<SettingsHub*>())
+      if (h->isVisible()) hub = h;
+    QVERIFY(hub);
     for (const char* key : {"general", "charts", "data", "offline", "sails",
                             "scenes", "automations"}) {
       const int page = m_win->pageIndex(key);
@@ -478,6 +483,136 @@ private slots:
     sys.setZoneSetpoint("forward", std::numeric_limits<double>::quiet_NaN());
     sys.applyScene("evening");
     m_win->setView(MainWindow::View::Chart);
+  }
+
+  void supplies() {
+    SideDrawer* drawer = m_win->drawer();
+    const int hub = m_win->pageIndex("supplies");
+    QVERIFY(hub > 0);
+    QCOMPARE(drawer->parentOf(hub), -1);  // main menu
+    for (const char* key : {"range", "provisions", "provision-check"})
+      QCOMPARE(drawer->parentOf(m_win->pageIndex(key)), hub);
+
+    // Range: a cold forecast shortens the diesel range.
+    const QDate today = QDate::currentDate();
+    QVector<DayForecast> mild, cold;
+    for (int i = 0; i < 14; ++i) {
+      mild << DayForecast{today.addDays(i), 15, 22, 10};
+      cold << DayForecast{today.addDays(i), -2, 3, 4};
+    }
+    auto& fc = TemperatureForecast::instance();
+    fc.setDays(mild, QPointF(10.3, 54.5), QDateTime::currentDateTimeUtc());
+    drawer->open(m_win->pageIndex("range"));
+    RangePage* page = m_win->rangePage();
+    QVERIFY(page->isVisible());
+    page->setMode(BoatMode::Anchor);
+    const double dieselMild =
+        page->result().resource(RangeResource::Diesel).days;
+    fc.setDays(cold, QPointF(10.3, 54.5), QDateTime::currentDateTimeUtc());
+    const RangeResult coldResult = page->result();
+    QVERIFY2(
+        coldResult.resource(RangeResource::Diesel).days < dieselMild,
+        qPrintable(QStringLiteral("%1 vs %2")
+                       .arg(coldResult.resource(RangeResource::Diesel).days)
+                       .arg(dieselMild)));
+    QVERIFY(coldResult.projection.first().forecast);
+    for (int k = 0; k < 4; ++k) {
+      auto* row = page->findChild<QWidget*>(QStringLiteral("range-%1").arg(k));
+      QVERIFY(row);
+      QVERIFY(!row->findChild<QLabel*>("days")->text().isEmpty());
+    }
+    // Underway: the engine.
+    page->setMode(BoatMode::Underway);
+    QVERIFY(page->result().rates.engineFuelLpd > 0);
+    page->setWindow(RangeWindow::LastTrip);
+    page->setWindow(RangeWindow::Days7);
+    QTest::qWait(400);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_RANGE_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    page->setMode(BoatMode::Anchor);
+
+    // Provisions: examples, filter, take one, edit.
+    auto& store = ProvisionStore::instance();
+    store.loadExamples(today);
+    drawer->open(m_win->pageIndex("provisions"));
+    ProvisionsPage* prov = m_win->provisionsPage();
+    QVERIFY(prov->isVisible());
+    QTest::qWait(50);
+    const ProvisionItem* tuna = nullptr;
+    for (const auto& i : store.items())
+      if (i.name == "Tuna") tuna = &i;
+    QVERIFY(tuna);
+    const QString tunaId = tuna->id;
+    const double before = tuna->quantity;
+    prov->setCategory(int(ProvisionCategory::Cans));
+    QTest::qWait(50);
+    ListRow* row = nullptr;
+    for (auto* r : prov->findChildren<ListRow*>("provision-" + tunaId))
+      if (!r->isHidden()) row = r;
+    QVERIFY(row);
+    // Only cans are listed.
+    for (auto* r : prov->findChildren<ListRow*>())
+      if (!r->isHidden() && r->objectName().startsWith("provision-")) {
+        const auto* item = store.find(r->objectName().mid(10));
+        QVERIFY(item && item->category == ProvisionCategory::Cans);
+      }
+    row->findChild<IconButton*>("take")->click();
+    QCOMPARE(store.find(tunaId)->quantity, before - 1);
+    QCOMPARE(store.find(tunaId)->usage.size(), 1);
+    // A new item through the editor.
+    prov->editItem({});
+    ProvisionEditor* ed = prov->editor();
+    QVERIFY(ed->isVisible());
+    ed->findChild<QLineEdit*>()->setText("Peaches");
+    ProvisionItem peaches = ed->item();
+    QCOMPARE(peaches.category, ProvisionCategory::Cans);
+    QVERIFY(peaches.bestBefore.isValid());  // typical shelf life
+    for (auto* b : ed->findChildren<QPushButton*>())
+      if (b->text() == tr("Save")) b->click();
+    bool found = false;
+    for (const auto& i : store.items())
+      if (i.name == "Peaches") found = i.category == ProvisionCategory::Cans;
+    QVERIFY(found);
+    QTest::qWait(50);
+    if (const QString shot =
+            qEnvironmentVariable("OCPN_QT_TEST_PROVISIONS_SHOT");
+        !shot.isEmpty()) {
+      prov->setCategory(-1);
+      QTest::qWait(100);
+      m_win->grab().save(shot);
+    }
+
+    // The check lists the problems and a shopping list.
+    drawer->open(m_win->pageIndex("provision-check"));
+    QTest::qWait(50);
+    auto* check = m_win->findChild<ProvisionCheckPage*>();
+    QVERIFY(check && check->isVisible());
+    int issues = 0;
+    for (auto* r : check->findChildren<ListRow*>("issue"))
+      if (!r->isHidden()) ++issues;
+    QCOMPARE(issues, int(store.check(today).size()));
+    QVERIFY(issues > 0);
+    QLabel* shopping = nullptr;
+    for (auto* l : check->findChildren<QLabel*>("shopping"))
+      if (!l->isHidden()) shopping = l;
+    QVERIFY(shopping && shopping->text().contains("Bread rolls"));
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_CHECK_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    drawer->close();
+
+    // The boat view shows the range.
+    m_win->setView(MainWindow::View::Boat);
+    QVERIFY(m_win->findChild<BoatView*>()->findChild<RangeCard*>());
+    if (const QString shot =
+            qEnvironmentVariable("OCPN_QT_TEST_BOAT_RANGE_SHOT");
+        !shot.isEmpty()) {
+      QTest::qWait(400);
+      m_win->grab().save(shot);
+    }
+    m_win->setView(MainWindow::View::Chart);
+    store.clear();
   }
 
   void polarEditorRoundTrip() {

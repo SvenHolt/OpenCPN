@@ -74,6 +74,7 @@ public:
 signals:
   void editScenesRequested();
   void automationsRequested();
+  void rangeRequested();
 
 protected:
   void paintEvent(QPaintEvent*) override;

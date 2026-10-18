@@ -76,6 +76,9 @@ struct EnergySystem {
   double shoreLimitA = 16;
   double chargerW = 0;
   QString chargerState = "Off";
+  // Engine alternator
+  double alternatorW = 0;
+  double alternatorMaxW = 840;  // 60 A
   // Loads
   double loadsW = 0;
 };
@@ -127,6 +130,16 @@ struct SceneLight {
 
 /** A light scene: brightness and color of the LEDs it contains. Lights not
  *  listed keep their state when the scene is applied. */
+/** Running totals since the program start; the consumption log records
+ *  their differences. */
+struct BoatCounters {
+  double freshL = 0, wasteL = 0;            // water used, holding tank inflow
+  double heaterFuelL = 0, engineFuelL = 0;  // diesel
+  double loadsWh = 0, heaterWh = 0;         // battery loads (heater part)
+  double solarWh = 0, shoreWh = 0, alternatorWh = 0;  // charging sources
+  double engineH = 0;
+};
+
 struct LightScene {
   QString id, name, icon;
   bool builtIn = false;
@@ -148,6 +161,10 @@ public:
   const EnergySystem& energy() const { return m_energy; }
   const Heater& heater() const { return m_heater; }
   const WaterHeater& waterHeater() const { return m_water; }
+  const BoatCounters& counters() const { return m_counters; }
+  const BoatTank* tank(BoatTank::Kind kind) const;
+  /** Engine running (NMEA engine data within the last minute). */
+  bool engineRunning() const;
   const BoatZone* zone(const QString& id) const;
   double outsideC() const;
 
@@ -204,6 +221,7 @@ private:
   EnergySystem m_energy;
   Heater m_heater;
   WaterHeater m_water;
+  BoatCounters m_counters;
   QVector<LightScene> m_scenes;
   QString m_scene = "off";
   QTimer m_timer;

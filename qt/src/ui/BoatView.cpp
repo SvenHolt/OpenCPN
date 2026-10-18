@@ -17,6 +17,7 @@
 #include "core/BoatSystems.h"
 #include "ui/GlassPanel.h"
 #include "ui/Icons.h"
+#include "ui/SupplyPages.h"
 #include "ui/Theme.h"
 
 namespace {
@@ -637,6 +638,13 @@ BoatView::BoatView(QWidget* parent) : QWidget(parent) {
   content->setAutoFillBackground(false);
 
   col->addWidget(card(tr("ENERGY · VICTRON"), new EnergyCard));
+
+  // Range at anchor and underway.
+  auto* rangeDetails = new QPushButton(tr("Details"));
+  rangeDetails->setProperty("role", "ghost");
+  rangeDetails->setCursor(Qt::PointingHandCursor);
+  connect(rangeDetails, &QPushButton::clicked, this, &BoatView::rangeRequested);
+  col->addWidget(card(tr("RANGE"), new RangeCard, rangeDetails));
 
   // Heater.
   auto* heater = new QWidget;

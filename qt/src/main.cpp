@@ -9,6 +9,7 @@
 #include <QStandardPaths>
 #include <QTimer>
 
+#include "core/Provisions.h"
 #include "core/AppSettings.h"
 #include "core/Connections.h"
 #include "core/GeoMath.h"
@@ -192,6 +193,9 @@ int main(int argc, char** argv) {
     });
   }
   ConnectionManager::instance().load();
+  // The demo shows a stocked boat.
+  if (cli.isSet(demo) && ProvisionStore::instance().items().isEmpty())
+    ProvisionStore::instance().loadExamples(QDate::currentDate());
   for (const QString& file : cli.values(importOsm)) {
     QString err;
     if (!OverpassService::instance().importFile(file, QString(), &err))

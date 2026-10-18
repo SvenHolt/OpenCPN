@@ -16,7 +16,7 @@ Zum Ausprobieren
   Wind und nächstem Wegpunkt. Unten links im Dock zwischen "Cockpit" und
   "Karte" umschalten (Taste C).
 * Hauptmenü im Dock: Einstellungen, Routen, Markierungen, Tracks, AIS,
-  Gezeiten, Wetter. Unter "Einstellungen" liegen Allgemein, Karten,
+  Gezeiten, Wetter, Versorgung. Unter "Einstellungen" liegen Allgemein, Karten,
   Datenverbindungen, Offline-Daten, Segel & Polare, Lichtszenen und
   Automationen (Pfeil oben links führt zurück).
 * Oben auf die Segelanzeige tippen (oder Einstellungen -> "Segel &
@@ -53,6 +53,12 @@ Zum Ausprobieren
   Einstellungen -> "Automationen", z. B. "Winter-Duschen": Heizung an,
   Salon 21 °C, Bad 23 °C, Warmwasser an, Licht "Duschen" - per Tipp oder
   zu einer Uhrzeit (Wochentage, Monate).
+* "Supplies" (Versorgung) -> "Range": wie lange Wasser, Fäkalientank,
+  Batterie und Diesel vor Anker bzw. unterwegs reichen - gelernt aus den
+  letzten Tagen oder der letzten Reise, die Heizung mit der
+  Temperaturvorhersage. "Provisions": Proviant nach Obst, Gemüse,
+  Konserven, Dosen, Kühlschrank, TK mit MHD; "Check provisions" zeigt,
+  was ausgeht oder verdirbt, und eine Einkaufsliste.
 * Einstellungen -> "Datenverbindungen": NMEA über UDP (Port 10110), TCP oder seriell (COM-Port)
 * "Media": Spotify über die Spotify-Web-API (Client-ID nötig, siehe
   Anleitung auf der Seite). Die automatische Erkennung von Spotify-Desktop

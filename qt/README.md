@@ -10,8 +10,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 * **Navigationskarte** im „Turn-by-Turn“-Stil: Richtungspfeil, Distanz,
   ETA, Restweg und XTE
 * **Dock am unteren Rand** mit dem Hauptmenü (Einstellungen, Routen,
-  Markierungen, Tracks, AIS, Gezeiten, Wetter, Plugins) und einer roten
-  MOB-Taste
+  Markierungen, Tracks, AIS, Gezeiten, Wetter, Versorgung, Plugins) und
+  einer roten MOB-Taste
 * **Seitenpanel**, das von links hereingleitet; unter **Einstellungen**
   liegen Allgemein, Karten, Datenverbindungen, Offline-Daten, Segel &
   Polare, Lichtszenen und Automationen als Unterseiten mit Zurück-Pfeil
@@ -34,6 +34,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
 | **Bordsysteme · Nachtfahrt** | **Automation „Winter-Duschen“** |
 | ![Boot](doc/screenshot-boat.png) | ![Automation](doc/screenshot-automation.png) |
+| **Reichweite: Wasser, Fäkalien, Batterie, Diesel** | **Proviant prüfen · Einkaufsliste** |
+| ![Reichweite](doc/screenshot-range.png) | ![Proviant](doc/screenshot-provisions.png) |
 | **Einstellungen (Hauptmenü)** | **Lichtszenen-Editor** |
 | ![Einstellungen](doc/screenshot-settings.png) | ![Lichtszenen](doc/screenshot-light-scenes.png) |
 | **Wettermodelle × Abfahrtszeit** | **Polardaten** |
@@ -70,6 +72,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Warmwasser, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
 | **Lichtszenen-Editor**: je LED an/aus, Helligkeit und Farbe, Live-Vorschau | ✅ |
 | **Automationen** (z. B. Winter-Duschen): per Tipp oder Uhrzeit, Wochentage, Monate | ✅ |
+| **Reichweite** von Wasser, Fäkalientank, Batterie und Diesel vor Anker und unterwegs (gelernt aus den letzten Tagen/der letzten Reise, Temperaturvorhersage) | ✅ |
+| **Proviant**: Obst, Gemüse, Konserven, Dosen, Kühlschrank, TK; Verbrauch, MHD, Prüfung, Einkaufsliste | ✅ |
 | **Hauptmenü**: Einstellungen, Routen, Markierungen, Tracks, AIS, Gezeiten, Wetter; Konfiguration und Offline unter Einstellungen | ✅ |
 | **Reisen offline speichern** (Route, Planung, Modelle, GRIB, Häfen und Küste entlang der Route) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
@@ -251,6 +255,53 @@ und Tanks leeren sich. Jeder Wert und jeder Schalter trägt bereits seinen
 Signal-K-Pfad (`environment.inside.<raum>.temperature`,
 `tanks.freshWater.0.currentLevel`, `electrical.switches.<id>.state` …).
 Die Signal-K-Anbindung und die Elektronik folgen später.
+
+### Versorgung: Reichweite und Proviant
+
+Hauptmenü **Supplies** (Versorgung) mit den Seiten Reichweite, Proviant und
+Proviant prüfen; die Bootsansicht zeigt die Reichweite als Karte.
+
+**Verbrauchsprotokoll.** Alle 30 Minuten werden der Wasserverbrauch, der
+Zulauf in den Fäkalientank, der Diesel (Heizung und Motor getrennt), der
+Strom (Verbraucher, davon Heizung; Solar, Landstrom, Lichtmaschine), die
+Motorstunden und die Außentemperatur aufgezeichnet, dazu der Zustand: vor
+Anker, unterwegs (Fahrt > 1,5 kn oder Motor an) oder Landstrom. 30 Tage
+bleiben gespeichert (`consumption.json`). Solange die Werte simuliert sind,
+beginnt das Protokoll mit 10 erzeugten Tagen (Ankern, Schläge, Hafen,
+Kälteeinbruch).
+
+**Reichweite.**
+* Grundlage wählbar: letzte 3, 7 oder 14 Tage oder die **letzte Reise**
+  (die letzte Zeit ohne Landstrom).
+* Die Tage werden eingeteilt: unterwegs (≥ 2 h Fahrt), Hafen (≥ 6 h
+  Landstrom) oder vor Anker. Je Art ergeben sich Wasser, Fäkalien, Motor-
+  diesel, Grundlast, Solar- und Lichtmaschinenertrag pro Tag. Mit zu wenig
+  Daten gelten typische Werte für zwei Personen.
+* Die Heizung hängt am Wetter: Diesel und Heizungsstrom werden **je
+  Heizgradtag** (Basis 18 °C) gelernt und mit der **Temperaturvorhersage**
+  (Open-Meteo, 16 Tage, Minimum und Maximum je Tag) hochgerechnet. Der
+  Solarertrag folgt der vorhergesagten Globalstrahlung. Hinter dem
+  Vorhersagezeitraum gilt deren Mittel, ohne Vorhersage (offline) die
+  gemessene Temperatur. Die letzte Vorhersage wird gespeichert.
+* Ergebnis je Ressource: Tage bis Frischwasser leer, Fäkalientank voll,
+  Batterie bei 20 % (an sonnigen Tagen lädt sie wieder) und Diesel bei der
+  Reserve (10 %); dazu Restmenge und Tagesverbrauch. Die knappste Ressource
+  ist die Grenze. Ein Diagramm zeigt die Füllstände Tag für Tag mit
+  Temperatur und Heizbedarf.
+
+**Proviant.**
+* Kategorien Obst, Gemüse, Konserven (Gläser), Dosen, Kühlschrank und
+  Tiefkühler; je Artikel Menge und Einheit (Stück, kg, g, l, Packung,
+  Dose, Glas), Mindesthaltbarkeit (ohne Angabe die typische der
+  Kategorie), geplanter Verbrauch pro Person und Tag und Mindestbestand.
+* „−“ in der Liste entnimmt eine Einheit; die **Inventur** im Artikel
+  bucht die Differenz als Verbrauch. Der Verbrauch pro Tag wird aus den
+  Entnahmen der letzten 14 Tage gemessen, sonst gilt der Plan × Crew.
+* **Prüfen** (Crew und Reisedauer einstellbar): Übersicht je Kategorie,
+  abgelaufene Artikel, bald ablaufende, Artikel, die vor dem Verbrauch
+  verderben, Artikel, die vor Reiseende ausgehen, und solche unter dem
+  Mindestbestand. Dazu eine **Einkaufsliste** für die Reise.
+* Gespeichert in `provisions.json`; `--demo` legt Beispielproviant an.
 
 ### Routenplanung von Hafen zu Hafen
 
@@ -522,7 +573,7 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--center lat,lon[,maßstab]` | zentriert die Karte, z. B. `40.84,-73.93,15000` |
 | `--view cockpit\|chart\|boat` | Startansicht |
 | `--day` | startet im Tagmodus |
-| `--page NAME` | öffnet eine Seite: `settings`, `routes`, `general`, `charts`, `data`, `offline`, `sails`, `scenes`, `automations` (oder ihre Nummer) |
+| `--page NAME` | öffnet eine Seite: `settings`, `routes`, `general`, `charts`, `data`, `offline`, `sails`, `scenes`, `automations`, `supplies`, `range`, `provisions`, `provision-check` (oder ihre Nummer) |
 | `--import-osm datei.osm` | importiert eine OSM-XML-Datei als Offline-Gebiet |
 | `--select-area` | startet die Auswahl eines Kartenausschnitts |
 | `--fresh` | nutzt temporäre Einstellungen und Daten; die echte Konfiguration bleibt unberührt |
@@ -588,6 +639,9 @@ qt/
 │   ├── BoatSystems        Bordsysteme (Räume, Tanks, Victron, Webasto,
 │   │                      Warmwasser, Licht, Szenen)
 │   ├── Automation         Automationen (Aktionen, Zeitplan, Speicher)
+│   ├── Consumption        Verbrauchsprotokoll (30 Tage)
+│   ├── Range              Reichweitenanalyse, Temperaturvorhersage
+│   ├── Provisions         Proviant, Verbrauch, Prüfung, Einkaufsliste
 │   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge,
 │   │                      OnlineOsm (öffentliche Server, Kachel-Cache, Nominatim)
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
@@ -604,6 +658,7 @@ qt/
 │   ├── VoyageList         Reisen (offline)
 │   ├── BoatView           Ansicht „Boot“: Kabinen-Layout und Systemkarten
 │   ├── BoatPages          Lichtszenen-Editor, Automationen
+│   ├── SupplyPages        Reichweite, Proviant, Proviant prüfen
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

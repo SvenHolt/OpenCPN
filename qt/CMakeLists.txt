@@ -82,6 +82,9 @@ set(OCPN_QT_CORE_SOURCES
   src/core/Voyage.cpp
   src/core/BoatSystems.cpp
   src/core/Automation.cpp
+  src/core/Consumption.cpp
+  src/core/Range.cpp
+  src/core/Provisions.cpp
   src/core/charts/Chart.cpp
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
@@ -127,6 +130,7 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/VoyageList.cpp
   src/ui/BoatView.cpp
   src/ui/BoatPages.cpp
+  src/ui/SupplyPages.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp
@@ -239,6 +243,9 @@ if(OCPN_QT_BUILD_TESTS)
     add_executable(ocpnqt_planning_tests tests/test_planning.cpp)
     target_link_libraries(ocpnqt_planning_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_planning_tests COMMAND ocpnqt_planning_tests)
+    add_executable(ocpnqt_supplies_tests tests/test_supplies.cpp)
+    target_link_libraries(ocpnqt_supplies_tests PRIVATE ocpnqt_core Qt6::Test)
+    add_test(NAME ocpnqt_supplies_tests COMMAND ocpnqt_supplies_tests)
     add_executable(ocpnqt_boat_tests tests/test_boat.cpp)
     target_link_libraries(ocpnqt_boat_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_boat_tests COMMAND ocpnqt_boat_tests)

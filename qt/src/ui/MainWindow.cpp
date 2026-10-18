@@ -19,6 +19,7 @@
 #include "ui/RoutePlanPanel.h"
 #include "ui/Overlays.h"
 #include "ui/SideDrawer.h"
+#include "ui/SupplyPages.h"
 #include "ui/Theme.h"
 #include "ui/TidesPage.h"
 #include "ui/TracksPage.h"
@@ -70,6 +71,38 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_chart->addLayer(new TideLayer(this));
   addSection("wind", tr("Weather"), new WeatherPage(m_chart));
   m_chart->addLayer(new GribLayer(this));
+  // Supplies: range of water, energy and diesel, provisions.
+  auto* supplies = new SettingsHub;
+  m_suppliesSection = addSection("basket", tr("Supplies"), supplies);
+  connect(supplies, &SettingsHub::pageRequested, m_drawer, &SideDrawer::open);
+  const auto supply = [this, supplies](const QString& key, const QString& icon,
+                                       const QString& title,
+                                       const QString& subtitle, QWidget* page) {
+    const int index = m_drawer->addPage(title, page, m_suppliesSection);
+    supplies->addEntry(icon, title, subtitle, index);
+    m_pageKeys.insert(key, index);
+    return index;
+  };
+  m_rangePage = new RangePage;
+  m_rangeSection = supply(
+      "range", "gauge", tr("Range"),
+      tr("Water, holding tank, battery, diesel – at anchor and underway"),
+      m_rangePage);
+  m_provisionsPage = new ProvisionsPage;
+  m_provisionsSection =
+      supply("provisions", "basket", tr("Provisions"),
+             tr("Fruit, vegetables, preserves, cans, fridge, freezer"),
+             m_provisionsPage);
+  auto* check = new ProvisionCheckPage;
+  supply("provision-check", "check", tr("Check provisions"),
+         tr("Lasts for the trip? Best-before dates, shopping list"), check);
+  connect(check, &ProvisionCheckPage::itemRequested, this,
+          [this](const QString& id) {
+            m_drawer->open(m_provisionsSection);
+            m_provisionsPage->editItem(id);
+          });
+  m_pageKeys.insert("supplies", m_suppliesSection);
+
   auto* timeBar = new WeatherTimeBar;
   timeBar->setProperty("chartOnly", true);
   addOverlay(timeBar, Qt::BottomLeftCorner);
@@ -123,6 +156,8 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
           [this] { m_drawer->open(m_scenesSection); });
   connect(m_boat, &BoatView::automationsRequested, this,
           [this] { m_drawer->open(m_automationsSection); });
+  connect(m_boat, &BoatView::rangeRequested, this,
+          [this] { m_drawer->open(m_rangeSection); });
   connect(&AutomationStore::instance(), &AutomationStore::ran, this,
           [this](const QString&, const QString& name) {
             m_toast->showMessage(tr("Automation “%1” started").arg(name),

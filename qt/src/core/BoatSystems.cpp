@@ -14,6 +14,7 @@
 #include <algorithm>
 
 #include "core/BoatConfig.h"
+#include "core/NavStore.h"
 
 namespace {
 QString tr(const char* s) {
@@ -161,6 +162,18 @@ void BoatSystems::setup() {
   // Lights: evening on the start.
   applyScene("evening");
   m_energy.soc = 0.82;
+}
+
+const BoatTank* BoatSystems::tank(BoatTank::Kind kind) const {
+  for (const auto& t : m_tanks)
+    if (t.kind == kind) return &t;
+  return nullptr;
+}
+
+bool BoatSystems::engineRunning() const {
+  const EngineData& e = NavStore::instance().engine();
+  return !std::isnan(e.rpm) && e.rpm > 300 && e.lastUpdate.isValid() &&
+         e.lastUpdate.secsTo(QDateTime::currentDateTimeUtc()) < 60;
 }
 
 const BoatZone* BoatSystems::zone(const QString& id) const {
@@ -615,18 +628,46 @@ void BoatSystems::simulate(double secs) {
   w.tempC +=
       ((w.heating ? w.powerW : 0) - waterLossW) * secs / (4186.0 * w.capacityL);
 
-  // Tanks: water use while the pump is on, the holding tank fills slowly.
-  for (auto& c : m_consumers)
-    if (c.id == "water_pump" && c.on)
-      for (auto& t : m_tanks) {
-        if (t.kind == BoatTank::Kind::FreshWater)
-          t.level = std::max(0.0, t.level - 0.4 / t.capacityL * secs / 600);
-        if (t.kind == BoatTank::Kind::WasteWater)
-          t.level = std::min(1.0, t.level + 0.15 / t.capacityL * secs / 600);
-      }
-  for (auto& t : m_tanks)
-    if (t.kind == BoatTank::Kind::Fuel)
-      t.level = std::max(0.0, t.level - h.fuelLph * secs / 3600 / t.capacityL);
+  // Tanks: about 22 l of water a day for two, mostly mornings and
+  // evenings, while the pump is on; a third ends in the holding tank.
+  // Diesel for the heater and the engine.
+  BoatCounters& cnt = m_counters;
+  bool pump = false;
+  for (const auto& c : m_consumers)
+    if (c.id == "water_pump") pump = c.on;
+  const int hr = now.time().hour();
+  const double weight = hr < 7                ? 0.1
+                        : hr < 9              ? 3.0
+                        : hr == 12            ? 1.5
+                        : hr >= 18 && hr < 21 ? 2.5
+                                              : 0.8;
+  const double waterL = pump ? 22.0 / 24 * weight * secs / 3600 : 0;
+  const bool engine = engineRunning();
+  const double engineLph =
+      engine ? (std::isnan(NavStore::instance().engine().fuelRateLph)
+                    ? BoatConfig::instance().consumptionLph
+                    : NavStore::instance().engine().fuelRateLph)
+             : 0;
+  for (auto& t : m_tanks) {
+    if (t.kind == BoatTank::Kind::FreshWater) {
+      const double used = std::min(waterL, t.level * t.capacityL);
+      t.level -= used / t.capacityL;
+      cnt.freshL += used;
+    }
+    if (t.kind == BoatTank::Kind::WasteWater) {
+      const double in = std::min(waterL / 3, (1 - t.level) * t.capacityL);
+      t.level += in / t.capacityL;
+      cnt.wasteL += in;
+    }
+    if (t.kind == BoatTank::Kind::Fuel) {
+      const double used = std::min((h.fuelLph + engineLph) * secs / 3600,
+                                   t.level * t.capacityL);
+      t.level -= used / t.capacityL;
+      cnt.heaterFuelL += h.fuelLph * secs / 3600;
+      cnt.engineFuelL += engineLph * secs / 3600;
+    }
+  }
+  if (engine) cnt.engineH += secs / 3600;
 
   // Energy (Victron): loads, solar, shore power, battery.
   EnergySystem& e = m_energy;
@@ -670,7 +711,17 @@ void BoatSystems::simulate(double secs) {
     e.chargerState = "Off";
   }
 
-  const double netW = e.solarW + e.chargerW - e.loadsW;
+  // The alternator charges while the engine runs.
+  e.alternatorW = engine ? (e.soc > 0.98  ? std::min(e.loadsW, e.alternatorMaxW)
+                            : e.soc > 0.9 ? e.alternatorMaxW * 0.4
+                                          : e.alternatorMaxW)
+                         : 0;
+  const double netW = e.solarW + e.chargerW + e.alternatorW - e.loadsW;
+  cnt.loadsWh += e.loadsW * secs / 3600;
+  cnt.heaterWh += heaterElW * secs / 3600;
+  cnt.solarWh += e.solarW * secs / 3600;
+  cnt.shoreWh += e.chargerW * secs / 3600;
+  cnt.alternatorWh += e.alternatorW * secs / 3600;
   e.current = netW / std::max(11.0, e.voltage);
   e.soc = std::clamp(e.soc + e.current * secs / 3600 / e.capacityAh, 0.0, 1.0);
   e.consumedAh = (1 - e.soc) * e.capacityAh;
