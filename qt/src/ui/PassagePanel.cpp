@@ -10,6 +10,7 @@
 #include <QLocale>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointer>
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
@@ -20,6 +21,9 @@
 #include "core/BoatConfig.h"
 #include "core/Grib.h"
 #include "core/NavStore.h"
+#include "core/Polar.h"
+#include "core/osm/OnlineOsm.h"
+#include "ui/Icons.h"
 #include "ui/Theme.h"
 
 namespace {
@@ -307,13 +311,10 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
   m_motorSpeed->setSuffix(tr(" kn"));
   m_motorSpeed->setValue(set.value("motorSpeed", 6.0).toDouble());
   speeds->addWidget(m_motorSpeed, 0, 1);
-  speeds->addWidget(label(tr("Max. under sail"), "dim"), 0, 2);
-  m_hullSpeed = new QDoubleSpinBox;
-  m_hullSpeed->setRange(2, 40);
-  m_hullSpeed->setDecimals(1);
-  m_hullSpeed->setSuffix(tr(" kn"));
-  m_hullSpeed->setValue(set.value("hullSpeed", 7.0).toDouble());
-  speeds->addWidget(m_hullSpeed, 0, 3);
+  m_polarInfo = label(QString(), "dim");
+  m_polarInfo->setWordWrap(true);
+  speeds->addWidget(m_polarInfo, 0, 2);
+  speeds->setColumnStretch(2, 1);
   l->addLayout(speeds);
 
   // Wind
@@ -339,6 +340,31 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
   windRow->addWidget(m_windDir, 1);
   windRow->addWidget(m_windKn, 1);
   l->addLayout(windRow);
+
+  // Weather models: every source over every departure of the window.
+  auto* modelHead = new QHBoxLayout;
+  modelHead->addWidget(label(tr("WEATHER MODELS"), "section"), 1);
+  auto* load = new QPushButton(tr("Load"));
+  load->setProperty("role", "ghost");
+  load->setIcon(Icons::icon("refresh", Theme::p().textDim, 16));
+  load->setToolTip(
+      tr("Load the forecasts of ICON, GFS, ECMWF and "
+         "Météo-France for this route (Open-Meteo)"));
+  load->setCursor(Qt::PointingHandCursor);
+  connect(load, &QPushButton::clicked, this, &PassagePanel::fetchForecasts);
+  modelHead->addWidget(load);
+  l->addLayout(modelHead);
+  m_modelInfo = label(QString(), "dim");
+  m_modelInfo->setWordWrap(true);
+  l->addWidget(m_modelInfo);
+  m_matrix = new ModelMatrix;
+  l->addWidget(m_matrix);
+  connect(m_matrix, &ModelMatrix::picked, this,
+          [this](const QString& source, const QDateTime& d) {
+            m_sourceId = source;
+            m_chosen = d;
+            recalculate();
+          });
 
   // Results
   m_results = new QWidget;
@@ -375,7 +401,8 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
   connect(m_window, &QComboBox::currentIndexChanged, this, changed);
   connect(m_optimize, &QComboBox::currentIndexChanged, this, changed);
   connect(m_strategy, &QButtonGroup::idClicked, this, changed);
-  for (auto* s : {m_motorSpeed, m_hullSpeed, m_windKn})
+  connect(&PolarStore::instance(), &PolarStore::changed, this, changed);
+  for (auto* s : {m_motorSpeed, m_windKn})
     connect(s, &QDoubleSpinBox::valueChanged, this, changed);
   connect(m_windDir, &QSpinBox::valueChanged, this, changed);
   connect(m_timeline, &DepartureTimeline::departureChosen, this,
@@ -397,7 +424,9 @@ PassageSettings PassagePanel::settings() const {
   s.optimize = PassageSettings::Optimize(m_optimize->currentIndex());
   s.strategy = PassageSettings::Strategy(m_strategy->checkedId());
   s.motorSpeedKn = m_motorSpeed->value();
-  s.hullSpeedKn = m_hullSpeed->value();
+  const Polar& polar = PolarStore::instance().polar();
+  s.polar = std::make_shared<Polar>(polar);
+  s.hullSpeedKn = polar.maxSpeed();
   const auto& boat = BoatConfig::instance();
   s.fuelLph = boat.consumptionLph;
   s.sailAreaFactor = boat.sails().anySail() ? boat.sails().areaFactor() : 1.0;
@@ -414,38 +443,182 @@ void PassagePanel::saveSettings() const {
   set.setValue("optimize", m_optimize->currentIndex());
   set.setValue("strategy", m_strategy->checkedId());
   set.setValue("motorSpeed", m_motorSpeed->value());
-  set.setValue("hullSpeed", m_hullSpeed->value());
   set.setValue("windFrom", m_windDir->value());
   set.setValue("windKn", m_windKn->value());
 }
 
 void PassagePanel::setRoute(const QVector<QPointF>& route) {
+  const bool same = route == m_route;
   m_route = route;
   m_chosen = {};
   setVisible(route.size() >= 2);
-  if (route.size() >= 2) recalculate();
+  if (route.size() < 2) return;
+  if (!same) {
+    // New route: forecasts of the old one no longer apply. Load them for
+    // the initial planning while online.
+    m_forecasts.clear();
+    if (OnlineOsm::instance().isEnabled() && OnlineOsm::instance().isOnline())
+      fetchForecasts();
+  }
+  recalculate();
+}
+
+QString PassagePanel::sourceName(const QString& id) const {
+  if (id == "manual") return tr("Manual");
+  if (id == "grib") return tr("GRIB file");
+  return WeatherModels::displayName(id);
+}
+
+WindSource PassagePanel::windFor(const QString& id) const {
+  if (id == "grib") return gribWind;
+  const auto it = m_forecasts.constFind(id);
+  if (it == m_forecasts.constEnd()) return {};
+  const ModelForecast f = *it;
+  return [f](double lat, double lon, const QDateTime& t, double& kn,
+             double& from) { return f.wind(lat, lon, t, kn, from); };
 }
 
 void PassagePanel::recalculate() {
   if (m_route.size() < 2) return;
   saveSettings();
-  const bool grib = bool(GribManager::instance().file());
-  m_windInfo->setText(
-      grib ? tr("Wind from the GRIB forecast; the values below are used "
-                "outside of it.")
-           : tr("No GRIB forecast loaded (Weather → load wind forecast): "
-                "constant wind as entered below."));
+  const Polar& polar = PolarStore::instance().polar();
+  m_polarInfo->setText(tr("Polar: %1 (max. %2 kn)")
+                           .arg(polar.name)
+                           .arg(polar.maxSpeed(), 0, 'f', 1));
+
+  // All wind sources over the departure window.
+  QStringList ids;
+  for (const auto& m : WeatherModels::available())
+    if (m_forecasts.contains(m.id)) ids << m.id;
+  if (GribManager::instance().file()) ids << "grib";
+  ids << "manual";
+  if (!ids.contains(m_sourceId)) m_sourceId = ids.first();
+
   const PassageSettings s = settings();
-  QVector<DepartureOption> options;
-  m_plan = PassagePlanner::planWindow(m_route, s, gribWind, &options);
+  QVector<SourceResult> rows;
+  QVector<DepartureOption> selectedOptions;
+  for (const QString& id : ids) {
+    SourceResult r;
+    r.id = id;
+    r.name = sourceName(id);
+    r.best = PassagePlanner::planWindow(m_route, s, windFor(id), &r.options);
+    // A source that leaves gaps (manual wind used) is shown dimmed.
+    r.usable = id == "manual" || !r.best.manualUsed;
+    if (id == m_sourceId) {
+      m_plan = r.best;
+      selectedOptions = r.options;
+    }
+    rows << r;
+  }
   if (m_chosen.isValid()) {
     PassageSettings one = s;
     one.departure = m_chosen;
     one.latestDeparture = {};
-    m_plan = PassagePlanner::plan(m_route, one, gribWind);
+    m_plan = PassagePlanner::plan(m_route, one, windFor(m_sourceId));
   }
-  showResults(options);
+  m_matrix->setResults(rows, m_sourceId, m_plan.departure);
+
+  // Agreement of the models on the selected departure.
+  double minH = 1e9, maxH = 0;
+  int models = 0;
+  for (const SourceResult& r : rows) {
+    if (r.id == "manual" || r.id == "grib" || !r.usable) continue;
+    PassageSettings one = s;
+    one.departure = m_plan.departure;
+    one.latestDeparture = {};
+    const PassagePlan p = PassagePlanner::plan(m_route, one, windFor(r.id));
+    minH = std::min(minH, p.hours);
+    maxH = std::max(maxH, p.hours);
+    ++models;
+  }
+  QString info;
+  if (m_forecasts.isEmpty()) {
+    info = tr("No model forecasts loaded yet.");
+  } else {
+    QDateTime fetched;
+    for (const auto& f : m_forecasts)
+      if (!fetched.isValid() || f.fetched < fetched) fetched = f.fetched;
+    info = tr("%n model(s), loaded %1%2", nullptr, int(m_forecasts.size()))
+               .arg(QLocale().toString(fetched.toLocalTime(),
+                                       QLocale::ShortFormat),
+                    m_forecastsOffline ? tr(" (stored offline)") : QString());
+    if (models >= 2)
+      info += tr(" · for this departure the models differ by %1")
+                  .arg(hoursText(maxH - minH));
+  }
+  m_modelInfo->setText(info);
+
+  m_windInfo->setText(
+      m_sourceId == "manual"
+          ? tr("Constant wind as entered below.")
+          : tr("Wind from %1; the values below are used outside of it.")
+                .arg(sourceName(m_sourceId)));
+  showResults(selectedOptions);
+  // The matrix shows the departures of all sources; the bar timeline is
+  // only needed without models.
+  m_timeline->setVisible(rows.size() == 1 && selectedOptions.size() > 1);
   emit planChanged();
+}
+
+void PassagePanel::setForecasts(const QHash<QString, ModelForecast>& f,
+                                bool offline) {
+  m_forecasts = f;
+  m_forecastsOffline = offline;
+  if (!f.isEmpty() && (m_sourceId == "manual" || !f.contains(m_sourceId)))
+    m_sourceId =
+        f.contains("icon_seamless") ? "icon_seamless" : f.begin().key();
+  m_debounce.start();
+}
+
+void PassagePanel::fetchForecasts() {
+  if (m_route.size() < 2) return;
+  m_modelInfo->setText(tr("Loading forecasts of the weather models…"));
+  QStringList models;
+  for (const auto& m : WeatherModels::available()) models << m.id;
+  QPointer<PassagePanel> self(this);
+  const QVector<QPointF> route = m_route;
+  WeatherModels::instance().fetch(
+      WeatherModels::samplePoints(route), models,
+      [self, route](const QHash<QString, ModelForecast>& f,
+                    const QString& err) {
+        if (!self || self->m_route != route) return;
+        if (!err.isEmpty() && f.isEmpty()) {
+          self->m_modelInfo->setText(
+              tr("Weather models not available: %1").arg(err));
+          return;
+        }
+        self->setForecasts(f, false);
+      });
+}
+
+QJsonObject PassagePanel::saveState() const {
+  return QJsonObject{
+      {"departure", m_departure->dateTime().toUTC().toString(Qt::ISODate)},
+      {"window", m_window->currentIndex()},
+      {"optimize", m_optimize->currentIndex()},
+      {"strategy", m_strategy->checkedId()},
+      {"motorSpeed", m_motorSpeed->value()},
+      {"windFrom", m_windDir->value()},
+      {"windKn", m_windKn->value()},
+      {"source", m_sourceId},
+      {"chosen", m_chosen.toUTC().toString(Qt::ISODate)}};
+}
+
+void PassagePanel::restoreState(const QJsonObject& o) {
+  const QDateTime dep =
+      QDateTime::fromString(o.value("departure").toString(), Qt::ISODate);
+  if (dep.isValid()) m_departure->setDateTime(dep.toLocalTime());
+  m_window->setCurrentIndex(o.value("window").toInt(m_window->currentIndex()));
+  m_optimize->setCurrentIndex(
+      o.value("optimize").toInt(m_optimize->currentIndex()));
+  if (auto* b = m_strategy->button(o.value("strategy").toInt(0)))
+    b->setChecked(true);
+  m_motorSpeed->setValue(o.value("motorSpeed").toDouble(m_motorSpeed->value()));
+  m_windDir->setValue(o.value("windFrom").toInt(m_windDir->value()));
+  m_windKn->setValue(o.value("windKn").toDouble(m_windKn->value()));
+  m_sourceId = o.value("source").toString(m_sourceId);
+  m_chosen = QDateTime::fromString(o.value("chosen").toString(), Qt::ISODate);
+  m_debounce.start();
 }
 
 void PassagePanel::showResults(const QVector<DepartureOption>& options) {
@@ -526,4 +699,129 @@ void PassagePanel::showResults(const QVector<DepartureOption>& options) {
     row->setWordWrap(true);
     m_legs->addWidget(row);
   }
+}
+
+// --------------------------------------------------------------------------
+
+namespace {
+constexpr int kNameWidth = 96;
+constexpr int kRowHeight = 28;
+constexpr int kHeader = 18;
+}  // namespace
+
+ModelMatrix::ModelMatrix(QWidget* parent) : QWidget(parent) {
+  setCursor(Qt::PointingHandCursor);
+  setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+}
+
+QSize ModelMatrix::sizeHint() const {
+  return {360, kHeader + int(m_rows.size()) * kRowHeight + 4};
+}
+
+int ModelMatrix::columns() const {
+  int n = 0;
+  for (const auto& r : m_rows) n = std::max(n, int(r.options.size()));
+  return n;
+}
+
+QRectF ModelMatrix::cell(int row, int col) const {
+  const double w = double(width() - kNameWidth) / std::max(1, columns());
+  return QRectF(kNameWidth + col * w + 1, kHeader + row * kRowHeight + 2,
+                std::max(2.0, w - 2), kRowHeight - 4);
+}
+
+void ModelMatrix::setResults(const QVector<SourceResult>& rows,
+                             const QString& selected,
+                             const QDateTime& departure) {
+  m_rows = rows;
+  m_selected = selected;
+  m_departure = departure;
+  setFixedHeight(sizeHint().height());
+  update();
+}
+
+void ModelMatrix::paintEvent(QPaintEvent*) {
+  if (m_rows.isEmpty()) return;
+  const Palette& pal = Theme::p();
+  QPainter p(this);
+  p.setRenderHint(QPainter::Antialiasing);
+  const int cols = columns();
+  // Header: departure times at the first, middle and last column.
+  p.setFont(Theme::font(10));
+  p.setPen(pal.textDim);
+  const auto& opts = m_rows.first().options;
+  for (int c : {0, cols / 2, cols - 1}) {
+    if (c < 0 || c >= opts.size()) continue;
+    const QRectF r = cell(0, c);
+    const Qt::Alignment a = cols == 1       ? Qt::AlignLeft
+                            : c == 0        ? Qt::AlignLeft
+                            : c == cols - 1 ? Qt::AlignRight
+                                            : Qt::AlignHCenter;
+    QRectF t(r.center().x() - 60, 0, 120, kHeader - 2);
+    if (c == 0) t.moveLeft(r.left());
+    if (c == cols - 1 && cols > 1) t.moveRight(r.right());
+    p.drawText(t, a | Qt::AlignVCenter,
+               opts[c].departure.toLocalTime().toString("ddd HH:mm"));
+  }
+  for (int row = 0; row < m_rows.size(); ++row) {
+    const SourceResult& r = m_rows[row];
+    const bool sel = r.id == m_selected;
+    p.setFont(Theme::font(12, sel ? QFont::DemiBold : QFont::Normal));
+    p.setPen(sel ? pal.text : pal.textDim);
+    p.drawText(
+        QRectF(0, kHeader + row * kRowHeight, kNameWidth - 6, kRowHeight),
+        Qt::AlignLeft | Qt::AlignVCenter, r.name);
+    for (int c = 0; c < r.options.size(); ++c) {
+      const DepartureOption& o = r.options[c];
+      const QRectF rc = cell(row, c);
+      const QColor faint = pal.panelPressed, accent = pal.accent;
+      const double f = o.sailShare;
+      QColor col = QColor::fromRgbF(
+          faint.redF() + (accent.redF() - faint.redF()) * f,
+          faint.greenF() + (accent.greenF() - faint.greenF()) * f,
+          faint.blueF() + (accent.blueF() - faint.blueF()) * f);
+      col.setAlphaF(r.usable ? 1.0 : 0.35);
+      p.setPen(Qt::NoPen);
+      p.setBrush(col);
+      p.drawRoundedRect(rc, 4, 4);
+      if (o.nightHours > 0.01 && o.hours > 0) {
+        QRectF n = rc;
+        n.setTop(n.bottom() - 4);
+        n.setWidth(rc.width() * std::min(1.0, o.nightHours / o.hours));
+        p.setBrush(QColor(0, 0, 0, 140));
+        p.drawRect(n);
+      }
+      const bool picked = sel && o.departure == m_departure;
+      if (o.best || picked) {
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(picked ? pal.text : pal.success, picked ? 2.2 : 1.6));
+        p.drawRoundedRect(rc.adjusted(0.5, 0.5, -0.5, -0.5), 4, 4);
+      }
+      if (rc.width() >= 36) {
+        const int mins = int(std::round(o.hours * 60));
+        p.setPen(f > 0.5 ? QColor(Qt::white) : pal.text);
+        p.setFont(Theme::font(10, QFont::DemiBold));
+        p.drawText(rc, Qt::AlignCenter,
+                   rc.width() >= 80
+                       ? QStringLiteral("%1:%2 h · %3 %")
+                             .arg(mins / 60)
+                             .arg(mins % 60, 2, 10, QChar('0'))
+                             .arg(int(std::round(f * 100)))
+                       : QStringLiteral("%1:%2").arg(mins / 60).arg(
+                             mins % 60, 2, 10, QChar('0')));
+      }
+    }
+  }
+}
+
+void ModelMatrix::mouseReleaseEvent(QMouseEvent* e) {
+  for (int row = 0; row < m_rows.size(); ++row)
+    for (int c = 0; c < m_rows[row].options.size(); ++c)
+      if (cell(row, c).adjusted(-1, -2, 1, 2).contains(e->position())) {
+        m_selected = m_rows[row].id;
+        m_departure = m_rows[row].options[c].departure;
+        update();
+        emit picked(m_selected, m_departure);
+        return;
+      }
 }

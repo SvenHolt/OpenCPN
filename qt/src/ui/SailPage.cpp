@@ -10,6 +10,7 @@
 #include <QVBoxLayout>
 
 #include "core/BoatConfig.h"
+#include "ui/PolarPanel.h"
 #include "ui/Theme.h"
 
 namespace {
@@ -132,6 +133,8 @@ SailPage::SailPage(QWidget* parent) : QWidget(parent) {
   hint->setProperty("role", "dim");
   hint->setContentsMargins(4, 10, 4, 4);
   l->addWidget(hint);
+  l->addWidget(section(tr("POLAR")));
+  l->addWidget(new PolarPanel);
   l->addStretch(1);
 
   sync();

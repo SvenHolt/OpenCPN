@@ -91,6 +91,7 @@ public:
                   QString* error = nullptr);
   void rebuildDatabase();
   bool isBusy() const { return m_busy; }
+  int queuedRegions() const { return int(m_queue.size()); }
   void cancel();
 
   // --- Queries ------------------------------------------------------------
@@ -133,7 +134,9 @@ private:
 
   // Running download
   bool m_busy = false;
-  int m_generation = 0;  // incremented by cancel()
+  int m_generation = 0;        // incremented by cancel()
+  QVector<OsmRegion> m_queue;  // regions waiting for download
+  bool m_importPending = false;
   OsmRegion m_current;
   QQueue<GeoBox> m_tileQueue;
   int m_tilesTotal = 0;

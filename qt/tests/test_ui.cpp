@@ -11,6 +11,8 @@
 #include "ui/MainWindow.h"
 #include "core/osm/OnlineOsm.h"
 #include "ui/OfflinePage.h"
+#include "ui/PassagePanel.h"
+#include "ui/PolarPanel.h"
 #include "ui/RoutePlanPanel.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
@@ -149,8 +151,8 @@ private slots:
     QVERIFY(plan->isEnabled());
     const int before = int(NavStore::instance().routes().size());
     plan->click();
-    QVERIFY(QTest::qWaitFor(
-        [save] { return !save->parentWidget()->isHidden(); }, 20000));
+    QVERIFY(QTest::qWaitFor([save, panel] { return save->isVisibleTo(panel); },
+                            20000));
     save->click();
     QCOMPARE(int(NavStore::instance().routes().size()), before + 1);
     const Route& r = NavStore::instance().routes().last();
@@ -159,6 +161,54 @@ private slots:
     QCOMPARE(r.points.last().name, QStringLiteral("Laboe"));
     QCOMPARE(NavStore::instance().activeRouteId(), r.id);
     NavStore::instance().stopNavigation();
+  }
+
+  void passageWithModels() {
+    auto* passage = m_win->findChild<PassagePanel*>();
+    QVERIFY(passage);
+    passage->setRoute({{10.0, 54.0}, {10.0, 54.2}});
+    // Two models: headwind (ICON) and beam wind (GFS).
+    const auto forecast = [](const QString& id, double from) {
+      ModelForecast f;
+      f.model = id;
+      f.points = {{10.0, 54.0}, {10.0, 54.2}};
+      const qint64 t0 = QDateTime::currentSecsSinceEpoch() - 3600;
+      for (int h = 0; h < 120; ++h) f.times << t0 + h * 3600;
+      for (int p = 0; p < 2; ++p) {
+        f.speedKn << QVector<float>(120, 14);
+        f.dirFrom << QVector<float>(120, float(from));
+        f.gustKn << QVector<float>(120, 18);
+      }
+      f.fetched = QDateTime::currentDateTimeUtc();
+      return f;
+    };
+    passage->setForecasts({{"icon_seamless", forecast("icon_seamless", 0)},
+                           {"gfs_seamless", forecast("gfs_seamless", 270)}},
+                          true);
+    QTest::qWait(400);
+    QCOMPARE(passage->source(), QStringLiteral("icon_seamless"));
+    QVERIFY(passage->plan().tacks > 0);
+    QVERIFY(passage->plan().gribUsed);
+    auto* matrix = passage->findChild<ModelMatrix*>();
+    QVERIFY(matrix);
+    // ICON, GFS and manual wind.
+    QVERIFY(matrix->height() >= 3 * 28);
+    // State for stored voyages.
+    const QJsonObject state = passage->saveState();
+    QCOMPARE(state.value("source").toString(), QStringLiteral("icon_seamless"));
+    passage->restoreState(state);
+    passage->setRoute({});
+  }
+
+  void polarEditorRoundTrip() {
+    Polar p = Polar::generic(7.5);
+    PolarEditor editor(p);
+    Polar out;
+    QString err;
+    QVERIFY2(editor.result(&out, &err), qPrintable(err));
+    QCOMPARE(out.tws, p.tws);
+    QCOMPARE(out.twa, p.twa);
+    QVERIFY(std::fabs(out.speedAt(12, 90) - p.speedAt(12, 90)) < 0.01);
   }
 
   void poiClassification() {

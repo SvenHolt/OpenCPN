@@ -62,6 +62,7 @@ bool isNight(double lat, double lon, const QDateTime& t) {
 
 double PassagePlanner::boatSpeed(const PassageSettings& s, double windKn,
                                  double twaDeg) {
+  if (s.polar && s.polar->isValid()) return s.polar->speedAt(windKn, twaDeg);
   if (windKn < 0.5 || twaDeg < s.noGoDeg - 1e-9) return 0;
   // Speed builds up with the wind and approaches the hull speed; more sail
   // area means the same speed in less wind.
@@ -115,14 +116,18 @@ PassagePlan PassagePlanner::plan(const QVector<QPointF>& route,
       // Under sail: direct, beating to windward or gybing downwind.
       PassageLeg::Mode sailMode = PassageLeg::Mode::Sail;
       double sailed = seg, minor = 0, v = 0;
-      if (twa < s.noGoDeg) {
+      // With a polar: the angles of the best VMG at this wind speed.
+      const bool polar = s.polar && s.polar->isValid();
+      const double noGo = polar ? s.polar->bestUpwindTwa(kn) : s.noGoDeg;
+      const double run = polar ? s.polar->bestDownwindTwa(kn) : s.runDeg;
+      if (twa < noGo) {
         sailMode = PassageLeg::Mode::Beat;
-        sailed = boards(seg, s.noGoDeg, twa, &minor);
-        v = boatSpeed(s, kn, s.noGoDeg);
-      } else if (twa > s.runDeg) {
+        sailed = boards(seg, noGo, twa, &minor);
+        v = boatSpeed(s, kn, noGo);
+      } else if (twa > run && run < 179) {
         sailMode = PassageLeg::Mode::Run;
-        sailed = boards(seg, 180 - s.runDeg, 180 - twa, &minor);
-        v = boatSpeed(s, kn, s.runDeg);
+        sailed = boards(seg, 180 - run, 180 - twa, &minor);
+        v = boatSpeed(s, kn, run);
       } else {
         v = boatSpeed(s, kn, twa);
       }

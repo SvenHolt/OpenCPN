@@ -77,6 +77,9 @@ set(OCPN_QT_CORE_SOURCES
   src/core/GribDownload.cpp
   src/core/RoutePlanner.cpp
   src/core/PassagePlanner.cpp
+  src/core/Polar.cpp
+  src/core/WeatherModels.cpp
+  src/core/Voyage.cpp
   src/core/charts/Chart.cpp
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
@@ -118,6 +121,8 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/OfflinePage.cpp
   src/ui/RoutePlanPanel.cpp
   src/ui/PassagePanel.cpp
+  src/ui/PolarPanel.cpp
+  src/ui/VoyageList.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp
@@ -227,6 +232,9 @@ if(OCPN_QT_BUILD_TESTS)
       set_tests_properties(ocpnqt_osm_tests PROPERTIES
         ENVIRONMENT "OPENCPN_OSM3S_BIN=${OSM3S_DIR}/bin")
     endif()
+    add_executable(ocpnqt_planning_tests tests/test_planning.cpp)
+    target_link_libraries(ocpnqt_planning_tests PRIVATE ocpnqt_core Qt6::Test)
+    add_test(NAME ocpnqt_planning_tests COMMAND ocpnqt_planning_tests)
     add_executable(ocpnqt_media_tests tests/test_media.cpp)
     target_link_libraries(ocpnqt_media_tests PRIVATE media_pi_core Qt6::Test)
     if(TARGET Qt6::DBus)

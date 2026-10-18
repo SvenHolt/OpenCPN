@@ -227,10 +227,16 @@ void OverpassService::fail(const QString& message) {
   m_tileData.clear();
   setBusy(false);
   emit error(message);
+  // Continue with queued regions; import what is there at the end.
+  if (!m_queue.isEmpty())
+    startDownload(m_queue.takeFirst());
+  else if (m_importPending)
+    rebuildDatabase();
 }
 
 void OverpassService::cancel() {
   ++m_generation;
+  m_queue.clear();
   m_tileQueue.clear();
   m_tilesTotal = 0;
   // Not busy first: the aborted reply and process finish synchronously.
@@ -303,7 +309,10 @@ bool OverpassService::importFile(const QString& path, const QString& name,
 
 void OverpassService::startDownload(const OsmRegion& region) {
   if (m_busy) {
-    emit error(tr("Another download is still running."));
+    // Queued; regions are downloaded one after the other.
+    m_queue << region;
+    emit progress(0, 0,
+                  tr("%n region(s) waiting", nullptr, int(m_queue.size())));
     return;
   }
   m_current = region;
@@ -501,12 +510,21 @@ void OverpassService::finishDownload() {
              if (!replaced) m_regions << m_current;
              save();
              emit regionsChanged();
+             if (!m_queue.isEmpty()) {
+               // One import for all queued regions at the end.
+               m_importPending = true;
+               setBusy(false);
+               startDownload(m_queue.takeFirst());
+               return;
+             }
+             m_importPending = false;
              importDatabase();
            });
 }
 
 void OverpassService::rebuildDatabase() {
   if (m_busy) return;
+  m_importPending = false;
   setBusy(true);
   importDatabase();
 }

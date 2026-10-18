@@ -3,10 +3,12 @@
 // sail/motor share, tacks and gybes, fuel, daylight and a leg list.
 #pragma once
 
+#include <QJsonObject>
 #include <QTimer>
 #include <QWidget>
 
 #include "core/PassagePlanner.h"
+#include "core/WeatherModels.h"
 
 class QButtonGroup;
 class QComboBox;
@@ -40,6 +42,39 @@ private:
   QDateTime m_selected;
 };
 
+/** One wind source (model, GRIB, manual) evaluated over the departures. */
+struct SourceResult {
+  QString id, name;
+  QVector<DepartureOption> options;
+  PassagePlan best;
+  bool usable = true;  // false if the source does not cover the passage
+};
+
+/** Matrix: wind sources × departure times; cell color = sail share,
+ *  text = duration. A click picks the source and the departure. */
+class ModelMatrix : public QWidget {
+  Q_OBJECT
+public:
+  explicit ModelMatrix(QWidget* parent = nullptr);
+  void setResults(const QVector<SourceResult>& rows, const QString& selected,
+                  const QDateTime& departure);
+  QSize sizeHint() const override;
+
+signals:
+  void picked(const QString& source, const QDateTime& departure);
+
+protected:
+  void paintEvent(QPaintEvent*) override;
+  void mouseReleaseEvent(QMouseEvent*) override;
+
+private:
+  QRectF cell(int row, int col) const;
+  int columns() const;
+  QVector<SourceResult> m_rows;
+  QString m_selected;
+  QDateTime m_departure;
+};
+
 class PassagePanel : public QWidget {
   Q_OBJECT
 public:
@@ -48,6 +83,16 @@ public:
   void setRoute(const QVector<QPointF>& route);
   const PassagePlan& plan() const { return m_plan; }
   PassageSettings settings() const;
+
+  /** Model forecasts (online or from a stored voyage). */
+  const QHash<QString, ModelForecast>& forecasts() const { return m_forecasts; }
+  void setForecasts(const QHash<QString, ModelForecast>& f, bool offline);
+  /** Inputs as JSON, for stored voyages. */
+  QJsonObject saveState() const;
+  void restoreState(const QJsonObject& o);
+  /** Fetches the model forecasts for the current route. */
+  void fetchForecasts();
+  QString source() const { return m_sourceId; }
 
   /** Wind from the loaded GRIB file, interpolated in time. */
   static bool gribWind(double lat, double lon, const QDateTime& t, double& kn,
@@ -59,6 +104,8 @@ signals:
 
 private:
   void recalculate();
+  WindSource windFor(const QString& id) const;
+  QString sourceName(const QString& id) const;
   void showResults(const QVector<DepartureOption>& options);
   void saveSettings() const;
 
@@ -72,7 +119,12 @@ private:
   QComboBox* m_optimize;
   QButtonGroup* m_strategy;
   QDoubleSpinBox* m_motorSpeed;
-  QDoubleSpinBox* m_hullSpeed;
+  QLabel* m_polarInfo;
+  QHash<QString, ModelForecast> m_forecasts;
+  bool m_forecastsOffline = false;
+  QString m_sourceId = "manual";
+  QLabel* m_modelInfo;
+  ModelMatrix* m_matrix;
   QSpinBox* m_windDir;
   QDoubleSpinBox* m_windKn;
   QLabel* m_windInfo;

@@ -28,10 +28,12 @@
 #include "core/GpxIO.h"
 #include "core/charts/ChartDatabase.h"
 #include "core/NavStore.h"
+#include "core/Voyage.h"
 #include "ui/ChartView.h"
 #include "ui/GlassPanel.h"
 #include "ui/Icons.h"
 #include "ui/RoutePlanPanel.h"
+#include "ui/VoyageList.h"
 #include "ui/Overlays.h"
 #include "ui/PluginManager.h"
 #include "ui/Theme.h"
@@ -190,6 +192,12 @@ RoutesPage::RoutesPage(ChartView* chart, QWidget* parent)
   hl->setContentsMargins(0, 0, 0, 0);
   hl->setSpacing(10);
   hl->addWidget(m_planner);
+  auto* voyages = new VoyageList;
+  connect(voyages, &VoyageList::openRequested, this, [this](const QString& id) {
+    if (const Voyage* v = VoyageStore::instance().voyage(id))
+      m_planner->openVoyage(*v);
+  });
+  hl->addWidget(voyages);
   hl->addWidget(label(tr("SAVED ROUTES"), "section"));
   setHeader(header);
   auto* io = new QHBoxLayout;

@@ -12,6 +12,9 @@
 #include <QStringList>
 #include <QVector>
 #include <functional>
+#include <memory>
+
+#include "core/Polar.h"
 
 struct PassageSettings {
   QDateTime departure;
@@ -34,6 +37,10 @@ struct PassageSettings {
   double fuelLph = 3.0;         // consumption at cruising RPM
   double sailAreaFactor = 1.0;  // SailConfig::areaFactor()
   bool downwindSail = false;    // gennaker/spinnaker set
+  /** Boat polar; without one a generic model scaled by hullSpeedKn and
+   *  the sail area is used. Beating/running angles then come from the
+   *  polar's best VMG. */
+  std::shared_ptr<const Polar> polar;
   double noGoDeg = 45;          // closest true wind angle when beating
   double runDeg = 160;          // deepest angle before gybing downwind
   double minSailWindKn = 5;     // less wind: motor

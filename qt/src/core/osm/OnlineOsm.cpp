@@ -229,14 +229,14 @@ bool OnlineOsm::tile(const QString& key, QVector<OsmElement>* out) {
     if (out) *out = *it;
     return true;
   }
-  const QString hash = QString::fromLatin1(
-      QCryptographicHash::hash(m_tileQuery.toUtf8(), QCryptographicHash::Md5)
-          .toHex()
-          .left(8));
-  QFile f(cacheDir() + "/" + hash + "_" + key + ".json");
-  if (!f.exists() || QFileInfo(f).lastModified().daysTo(
-                         QDateTime::currentDateTime()) > kCacheDays)
-    return false;
+  // Tiles stored with a voyage never expire.
+  QFile f(pinnedDir() + "/" + tileFile(m_tileQuery, key));
+  if (!f.exists()) {
+    f.setFileName(cacheDir() + "/" + tileFile(m_tileQuery, key));
+    if (!f.exists() || QFileInfo(f).lastModified().daysTo(
+                           QDateTime::currentDateTime()) > kCacheDays)
+      return false;
+  }
   if (!f.open(QIODevice::ReadOnly)) return false;
   const QVector<OsmElement> e = OverpassService::parseJson(f.readAll());
   m_tiles.insert(key, e);
@@ -271,12 +271,7 @@ void OnlineOsm::nextTile() {
             if (err.isEmpty()) {
               const QVector<OsmElement> e = OverpassService::parseJson(out);
               m_tiles.insert(key, e);
-              const QString hash = QString::fromLatin1(
-                  QCryptographicHash::hash(m_tileQuery.toUtf8(),
-                                           QCryptographicHash::Md5)
-                      .toHex()
-                      .left(8));
-              QSaveFile f(cacheDir() + "/" + hash + "_" + key + ".json");
+              QSaveFile f(cacheDir() + "/" + tileFile(m_tileQuery, key));
               if (f.open(QIODevice::WriteOnly)) {
                 f.write(toJson(e));
                 f.commit();
@@ -292,6 +287,109 @@ void OnlineOsm::nextTile() {
           // Be gentle with the public servers.
           QTimer::singleShot(300, this, &OnlineOsm::nextTile);
         });
+}
+
+QString OnlineOsm::tileFile(const QString& query, const QString& key) {
+  const QString hash = QString::fromLatin1(
+      QCryptographicHash::hash(query.toUtf8(), QCryptographicHash::Md5)
+          .toHex()
+          .left(8));
+  return hash + "_" + key + ".json";
+}
+
+QString OnlineOsm::pinnedDir() const {
+  const QString d =
+      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
+      "/osm-tiles";
+  QDir().mkpath(d);
+  return d;
+}
+
+void OnlineOsm::prefetchTiles(const QStringList& keys, const QString& query,
+                              std::function<void(int, int)> progress,
+                              std::function<void(int, int)> done) {
+  struct State {
+    QStringList keys;
+    int index = 0, ok = 0, failed = 0;
+  };
+  auto st = std::make_shared<State>();
+  st->keys = keys;
+  auto next = std::make_shared<std::function<void()>>();
+  *next = [this, st, query, progress, done, next] {
+    while (st->index < st->keys.size()) {
+      const QString key = st->keys[st->index];
+      const QString name = tileFile(query, key);
+      if (QFile::exists(pinnedDir() + "/" + name)) {
+        ++st->ok;
+        ++st->index;
+        continue;
+      }
+      // Recently cached: keep a copy that does not expire.
+      if (QFile::exists(cacheDir() + "/" + name) &&
+          QFileInfo(cacheDir() + "/" + name)
+                  .lastModified()
+                  .daysTo(QDateTime::currentDateTime()) <= 1) {
+        QFile::copy(cacheDir() + "/" + name, pinnedDir() + "/" + name);
+        ++st->ok;
+        ++st->index;
+        continue;
+      }
+      break;
+    }
+    if (progress) progress(st->index, int(st->keys.size()));
+    if (st->index >= st->keys.size()) {
+      if (done) done(st->ok, st->failed);
+      *next = nullptr;  // break the reference cycle
+      return;
+    }
+    const QString key = st->keys[st->index];
+    this->query(query.arg(tileBox(key).overpassBbox()),
+                [this, st, query, key, next](const QByteArray& out,
+                                             const QString& err) {
+                  if (err.isEmpty()) {
+                    QSaveFile f(pinnedDir() + "/" + tileFile(query, key));
+                    if (f.open(QIODevice::WriteOnly)) {
+                      f.write(toJson(OverpassService::parseJson(out)));
+                      f.commit();
+                    }
+                    ++st->ok;
+                  } else {
+                    ++st->failed;
+                  }
+                  ++st->index;
+                  QTimer::singleShot(200, this, [next] {
+                    if (*next) (*next)();
+                  });
+                });
+  };
+  (*next)();
+}
+
+QVector<OsmElement> OnlineOsm::searchCached(const QString& text,
+                                            int limit) const {
+  QVector<OsmElement> out;
+  QSet<qint64> seen;
+  for (const QString& dir : {pinnedDir(), cacheDir()}) {
+    for (const QFileInfo& fi :
+         QDir(dir).entryInfoList({"*.json"}, QDir::Files)) {
+      QFile f(fi.absoluteFilePath());
+      if (!f.open(QIODevice::ReadOnly)) continue;
+      const QByteArray data = f.readAll();
+      // Cheap pre-check before parsing.
+      if (!QString::fromUtf8(data).contains(text, Qt::CaseInsensitive))
+        continue;
+      for (const OsmElement& e : OverpassService::parseJson(data)) {
+        QString name = e.name();
+        if (name.isEmpty()) name = e.tags.value("seamark:name");
+        if (!name.contains(text, Qt::CaseInsensitive) || seen.contains(e.id))
+          continue;
+        seen.insert(e.id);
+        out << e;
+        if (out.size() >= limit) return out;
+      }
+    }
+  }
+  return out;
 }
 
 // --------------------------------------------------------------------------

@@ -50,6 +50,14 @@ public:
    *  latest request is kept, older pending tiles are dropped. */
   void requestTiles(const QStringList& keys, const QString& tileQuery);
 
+  /** Downloads tiles for offline use (stored without expiry, e.g. along a
+   *  voyage), one after the other. */
+  void prefetchTiles(const QStringList& keys, const QString& tileQuery,
+                     std::function<void(int done, int total)> progress,
+                     std::function<void(int ok, int failed)> done);
+  /** Name search in all stored tiles (works offline). */
+  QVector<OsmElement> searchCached(const QString& text, int limit = 20) const;
+
   // --- Place search --------------------------------------------------------
   using PlacesCallback = std::function<void(const QVector<OsmElement>&)>;
   /** Nominatim search near a position (1 request per second at most). */
@@ -70,6 +78,8 @@ private:
   void nextTile();
   void runSearch();
   QString cacheDir() const;
+  QString pinnedDir() const;
+  static QString tileFile(const QString& query, const QString& key);
 
   QNetworkAccessManager m_net;
   bool m_enabled = true;

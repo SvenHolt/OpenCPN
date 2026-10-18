@@ -29,7 +29,12 @@ Zum Ausprobieren
   navigieren". Die Route führt übers Wasser; Tiefen werden nicht
   berücksichtigt. Darunter die Törnplanung: Abfahrt, Zeitfenster,
   Segeln/Motor, Wind (GRIB oder manuell) -> Dauer, Ankunft, Segelanteil,
-  Wenden, Diesel und Etappen. Mit Internet werden Häfen beim Verschieben
+  Wenden, Diesel und Etappen. Die Matrix vergleicht die Wettermodelle
+  (ICON, GFS, ECMWF, Météo-France) über die Abfahrtszeiten. "Reise für
+  offline speichern" sichert Route, Vorhersagen und Häfen entlang der
+  Strecke für unterwegs ohne Internet.
+* "Segel" -> Polare: Polardatei importieren (.pol/.csv/Expedition) oder
+  in der Tabelle bearbeiten. Mit Internet werden Häfen beim Verschieben
   der Karte und bei der Suche automatisch online nachgeladen.
 * "Offline" -> "Bereich auf Karte wählen": Rahmen an Ecken/Kanten ziehen,
   Namen eingeben, "Laden". Häfen, Marinas, Tankstellen und Seezeichen aus

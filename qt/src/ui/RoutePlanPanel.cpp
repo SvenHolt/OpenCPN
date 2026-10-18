@@ -16,13 +16,16 @@
 
 #include "core/AppSettings.h"
 #include "core/GeoMath.h"
+#include "core/Grib.h"
 #include "core/NavStore.h"
+#include "core/Voyage.h"
 #include "core/osm/OnlineOsm.h"
 #include "core/osm/Overpass.h"
 #include "ui/ChartView.h"
 #include "ui/DrawerPages.h"
 #include "ui/GlassPanel.h"
 #include "ui/Icons.h"
+#include "ui/OfflinePage.h"
 #include "ui/PassagePanel.h"
 #include "ui/Theme.h"
 
@@ -190,17 +193,65 @@ void PlaceField::search() {
   if (text.size() < 2) return;
   QPointer<PlaceField> self(this);
   // Adds results of one source, without duplicates of earlier ones.
-  const auto merge = [self, id](const QVector<Place>& more) {
+  // Ordered by rank: own position and marks, then online results (the
+  // initial planning), then offline data.
+  const auto merge = [self, id](QVector<Place> more, int rank) {
     if (!self || id != self->m_searchId) return;
-    for (const Place& p : more) {
+    for (Place& p : more) {
+      p.rank = rank;
       bool dup = false;
       for (const Place& q : self->m_results)
         dup |= q.name == p.name &&
                geo::distanceNm(q.lat, q.lon, p.lat, p.lon) < 0.5;
-      if (!dup && self->m_results.size() < 16) self->m_results << p;
+      if (!dup) self->m_results << p;
     }
+    std::stable_sort(
+        self->m_results.begin(), self->m_results.end(),
+        [](const Place& a, const Place& b) { return a.rank < b.rank; });
+    if (self->m_results.size() > 16) self->m_results.resize(16);
     self->showSuggestions(self->m_results);
   };
+  const QPointF near = m_near ? m_near() : QPointF();
+  auto& online = OnlineOsm::instance();
+  const bool isOnline = online.isEnabled() && online.isOnline();
+
+  // Online: marinas and harbours by name around the chart (Overpass).
+  if (isOnline) {
+    const GeoBox around{near.y() - 0.75, near.x() - 1.2, near.y() + 0.75,
+                        near.x() + 1.2};
+    const QString re = qlRegex(text);
+    const QString q =
+        QStringLiteral(
+            "[out:json][timeout:20][bbox:%1];("
+            "nwr[\"leisure\"=\"marina\"][\"name\"~\"%2\",i];"
+            "nwr[\"seamark:type\"=\"harbour\"][\"name\"~\"%2\",i];"
+            "nwr[\"harbour\"=\"yes\"][\"name\"~\"%2\",i];"
+            "nwr[\"seamark:type\"=\"anchorage\"][\"name\"~\"%2\",i];"
+            ");out center tags 20;")
+            .arg(around.overpassBbox(), re);
+    online.query(q, [merge](const QByteArray& out, const QString& err) {
+      if (!err.isEmpty()) return;
+      QVector<Place> found;
+      for (const OsmElement& e : OverpassService::parseJson(out))
+        if (!e.name().isEmpty())
+          found << Place{e.name(), "harbour", e.lat, e.lon, true, tr("online")};
+      merge(found, 1);
+    });
+  }
+
+  // Offline: stored harbour tiles (voyages, recently viewed areas).
+  {
+    QVector<Place> found;
+    for (const OsmElement& e : online.searchCached(text, 12)) {
+      QString name = e.name();
+      if (name.isEmpty()) name = e.tags.value("seamark:name");
+      const bool harbour =
+          OsmPoiLayer::classify(e) != OsmPoiLayer::Kind::Seamark;
+      found << Place{
+          name, harbour ? "harbour" : "mark", e.lat, e.lon, true, tr("stored")};
+    }
+    merge(found, 3);
+  }
 
   // Harbours, marinas and towns from the offline OSM regions.
   auto& svc = OverpassService::instance();
@@ -231,14 +282,13 @@ void PlaceField::search() {
                        e.lat, e.lon,
                        true,  tr("offline")};
       }
-      merge(found);
+      merge(found, 2);
     });
   }
 
   // Online: Nominatim finds harbours, marinas and places worldwide,
   // preferring those near the chart.
-  const QPointF near = m_near ? m_near() : QPointF();
-  OnlineOsm::instance().searchPlaces(
+  online.searchPlaces(
       text, near.y(), near.x(), [merge](const QVector<OsmElement>& elements) {
         QVector<Place> found;
         for (const OsmElement& e : elements) {
@@ -260,7 +310,7 @@ void PlaceField::search() {
                          [](const Place& a, const Place& b) {
                            return (a.kind == "harbour") > (b.kind == "harbour");
                          });
-        merge(found);
+        merge(found, 1);
       });
 }
 
@@ -362,7 +412,23 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
   connect(saveBtn, &QPushButton::clicked, this, [this] { save(false); });
   connect(go, &QPushButton::clicked, this, [this] { save(true); });
   connect(discard, &QPushButton::clicked, this, &RoutePlanPanel::clearResult);
-  m_actions->hide();
+  auto* offline = new QPushButton(tr("Store voyage for offline use"));
+  offline->setIcon(Icons::icon("download", Theme::p().text, 18));
+  offline->setToolTip(
+      tr("Keeps route, passage plan, weather models, GRIB file and the "
+         "harbours and coastline along the route available without "
+         "internet"));
+  offline->setCursor(Qt::PointingHandCursor);
+  connect(offline, &QPushButton::clicked, this, &RoutePlanPanel::storeVoyage);
+  auto* actionsCol = new QWidget;
+  auto* acl = new QVBoxLayout(actionsCol);
+  acl->setContentsMargins(0, 0, 0, 0);
+  acl->setSpacing(6);
+  acl->addWidget(m_actions);
+  acl->addWidget(offline);
+  m_actions->show();
+  m_actionsBox = actionsCol;
+  m_actionsBox->hide();
 
   m_passage = new PassagePanel;
   connect(m_passage, &PassagePanel::planChanged, this, [this] {
@@ -371,7 +437,7 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
     m_layer->setLegModes(modes);
   });
   l->addWidget(m_passage);
-  l->addWidget(m_actions);
+  l->addWidget(m_actionsBox);
 
   const auto update = [this] {
     m_calc->setEnabled(m_from->place().valid && m_to->place().valid &&
@@ -392,7 +458,7 @@ void RoutePlanPanel::clearResult() {
   m_layer->setPoints({});
   m_passage->setRoute({});
   m_result->hide();
-  m_actions->hide();
+  m_actionsBox->hide();
 }
 
 void RoutePlanPanel::calculate() {
@@ -482,13 +548,13 @@ void RoutePlanPanel::finished() {
   m_result->show();
   if (!m_plan.ok()) {
     m_result->setText(m_plan.error);
-    m_actions->hide();
+    m_actionsBox->hide();
     return;
   }
   m_result->setText(
       tr("%1 · %n waypoint(s)", nullptr, int(m_plan.points.size()))
           .arg(AppSettings::instance().distanceText(m_plan.lengthNm)));
-  m_actions->show();
+  m_actionsBox->show();
   m_layer->setPoints(m_plan.points);
   m_passage->setRoute(m_plan.points);
   double s = 90, w = 180, n = -90, e = -180;
@@ -534,4 +600,52 @@ void RoutePlanPanel::save(bool navigate) {
   const QString id = NavStore::instance().addRoute(r);
   if (navigate) NavStore::instance().activateRoute(id);
   clearResult();
+}
+
+void RoutePlanPanel::storeVoyage() {
+  if (!m_plan.ok()) return;
+  Voyage v;
+  v.fromName = m_from->place().name;
+  v.toName = m_to->place().name;
+  v.name = QStringLiteral("%1 → %2").arg(v.fromName, v.toName);
+  v.route = m_plan.points;
+  v.settings = m_passage->saveState();
+  v.forecasts = m_passage->forecasts();
+  auto& store = VoyageStore::instance();
+  const QString id = store.save(v);
+  store.prepareOffline(id, OsmPoiLayer::queryTemplate());
+}
+
+void RoutePlanPanel::openVoyage(const Voyage& v) {
+  if (v.route.size() < 2) return;
+  m_from->setPlace(Place{v.fromName, "harbour", v.route.first().y(),
+                         v.route.first().x(), true});
+  m_to->setPlace(
+      Place{v.toName, "harbour", v.route.last().y(), v.route.last().x(), true});
+  m_plan = {};
+  m_plan.points = v.route;
+  m_plan.lengthNm = v.lengthNm();
+  m_result->setText(
+      tr("%1 · %n waypoint(s) · stored voyage", nullptr, int(v.route.size()))
+          .arg(AppSettings::instance().distanceText(m_plan.lengthNm)));
+  m_result->show();
+  m_actionsBox->show();
+  m_layer->setPoints(v.route);
+  // The GRIB file stored with the voyage, if none is open.
+  if (!v.gribFile.isEmpty() && !GribManager::instance().file())
+    GribManager::instance().open(VoyageStore::instance().folder(v.id) + "/" +
+                                 v.gribFile);
+  m_passage->restoreState(v.settings);
+  // Fresh forecasts when online (setRoute loads them), the stored ones
+  // otherwise or until they arrive.
+  m_passage->setRoute(v.route);
+  if (!v.forecasts.isEmpty()) m_passage->setForecasts(v.forecasts, true);
+  double s = 90, w = 180, n = -90, e = -180;
+  for (const QPointF& p : v.route) {
+    s = std::min(s, p.y());
+    n = std::max(n, p.y());
+    w = std::min(w, p.x());
+    e = std::max(e, p.x());
+  }
+  m_chart->fitGeoBounds(s, w, n, e);
 }

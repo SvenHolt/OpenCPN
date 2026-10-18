@@ -28,6 +28,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
 | **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
+| **Wettermodelle × Abfahrtszeit** | **Polardaten** |
+| ![Modelle](doc/screenshot-models.png) | ![Polare](doc/screenshot-polar.png) |
 | **Kartenausschnitt für Offline-Daten wählen** | **Offline-Gebiete · lokale Overpass-Instanz** |
 | ![Auswahl](doc/screenshot-offline-select.png) | ![Offline](doc/screenshot-offline.png) |
 
@@ -55,6 +57,9 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Routenplanung von Hafen zu Hafen** (automatisch über Wasser, Land und Molen werden umfahren) | ✅ |
 | **Törnplanung**: Zeitfenster, Segel-/Motoranteil, Wenden/Halsen, Dauer, Ankunft, Diesel, Tageslicht (GRIB-Wind) | ✅ |
 | **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
+| **Polardaten**: Import (.pol/.csv/Expedition), Tabelleneditor, Diagramm, optimale Kreuz-/Vorwindwinkel | ✅ |
+| **Wettermodelle vergleichen** (ICON, GFS, ECMWF, Météo-France, GRIB, manuell) × Abfahrtszeiten | ✅ |
+| **Reisen offline speichern** (Route, Planung, Modelle, GRIB, Häfen und Küste entlang der Route) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
 | GPX-Import/-Export (auch OpenCPN `navobj.xml`) | ✅ |
 | S-63 (verschlüsselte ENC), CM93 | ❌ siehe Grenzen |
@@ -190,6 +195,70 @@ So rechnet der Planer:
 * Liegen Start oder Ziel an Land (z. B. die Mitte einer Marina), wird die
   nächste erreichbare Wasserfläche gewählt.
 
+#### Polardaten
+
+Unter **Segel → Polare** liegt die Polare des Bootes:
+
+* **Import** der üblichen Formate:
+  * Tabellen von OpenCPN, qtVlm und ORC, auch als CSV mit Semikolon und
+    Dezimalkomma. Die erste Zeile enthält die Windgeschwindigkeiten, die
+    erste Spalte die Windwinkel.
+  * Expedition: eine Zeile pro Windstärke im Format
+    „TWS Winkel Fahrt Winkel Fahrt …“.
+* **Bearbeiten:** Tabelleneditor mit Zeilen und Spalten zum Hinzufügen und
+  Entfernen. Die Eingaben werden beim Speichern geprüft (Werte aufsteigend,
+  Winkel 0–180°).
+* **Export** als `.pol`.
+* **Generisch:** eine Fahrtenyacht-Polare, skaliert auf die beste Fahrt.
+* **Diagramm:** Kurven für 6–25 kn, die Punkte markieren den besten VMG
+  am Wind und vor dem Wind.
+
+Der Törnplaner rechnet mit der Polare (bilinear interpoliert). Kreuz- und
+Vorwindwinkel sind die Winkel mit dem besten VMG bei der jeweiligen
+Windstärke.
+
+#### Wettermodelle und Abfahrtszeit
+
+Nach der Routenberechnung lädt die App bei Verbindung automatisch die
+stündlichen Windvorhersagen von **ICON (DWD)**, **GFS (NOAA)**,
+**ECMWF IFS** und **Météo-France** für Punkte entlang der Route
+(Open-Meteo, 7 Tage). Die Matrix zeigt für jede Quelle die Abfahrten im
+Zeitfenster:
+
+* Zeilen: die Modelle, eine geladene GRIB-Datei und der manuelle Wind.
+* Spalten: die Abfahrtszeiten im Zeitfenster.
+* Zellfarbe: Segelanteil. Zelltext: Dauer. Unterer Rand: Nachtanteil.
+* Grün umrandet ist die beste Abfahrt je Quelle, weiß die gewählte. Ein
+  Tipp wählt Quelle und Abfahrt für die Detailansicht.
+* Darüber steht, wie weit die Modelle für die gewählte Abfahrt
+  auseinanderliegen.
+
+#### Reisen offline speichern
+
+**„Reise für offline speichern“** legt die Reise unter
+`voyages/<id>/voyage.json` im Benutzerdatenordner ab und lädt nach:
+
+1. Vorhersagen aller Wettermodelle entlang der Route.
+2. Eine Kopie der geöffneten GRIB-Datei.
+3. Häfen, Marinas und Seezeichen in Kacheln entlang der Route (±5 sm).
+   Sie werden ohne Ablaufdatum gespeichert.
+4. Offline-Regionen (Küste, Häfen) entlang der Route (±3 sm) für die lokale
+   Overpass-Instanz. Sie werden nacheinander geladen und am Ende einmal
+   importiert.
+
+Unter **Reisen (offline)** auf der Routen-Seite öffnet ein Tipp die Reise
+mit Route, Eingaben und den gespeicherten Vorhersagen, auch ohne Internet.
+Mit Verbindung werden die Vorhersagen frisch geladen. „Aktualisieren“
+lädt fehlende oder neue Daten nach.
+
+#### Suche
+
+Für die erste Planung fragt die Suche zuerst Online-Quellen: Nominatim
+und Overpass (Marinas, Häfen, Ankerplätze im Umkreis der Karte). Danach
+kommen die lokale Overpass-Instanz und die gespeicherten Hafenkacheln.
+Ohne Netz findet sie so weiterhin die Häfen entlang gespeicherter Reisen
+und kürzlich angesehener Gebiete.
+
 #### Törnplanung
 
 Nach der Berechnung zeigt der Bereich **Törn**:
@@ -215,10 +284,9 @@ Nach der Berechnung zeigt der Bereich **Törn**:
   Motor), Wenden/Halsen, Zeiten, Wind und TWA. Auf der Karte ist jede
   Etappe nach Fahrmodus eingefärbt.
 
-So wird gerechnet: Die Bootsgeschwindigkeit stammt aus einer einfachen
-Polare (beste Fahrt unter Segeln einstellbar, skaliert mit der gesetzten
-Segelfläche und einem Leichtwindsegel). Gegen den Wind wird mit 45° zum
-wahren Wind gekreuzt, vor dem Wind ab 160° mit Halsen. Pro Schlaglänge von
+So wird gerechnet: Die Bootsgeschwindigkeit stammt aus der Polare des
+Bootes (siehe oben). Gekreuzt bzw. gehalst wird mit den Winkeln des besten
+VMG. Pro Schlaglänge von
 etwa 1,5 sm wird eine Wende gezählt. Der Wind wird alle 2 sm neu bestimmt.
 Beim Speichern erhalten die Wegpunkte ETA bzw. ETD und Fahrmodus.
 
@@ -355,7 +423,7 @@ sudo apt install libexpat1-dev zlib1g-dev liblz4-dev
 cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release -DOCPN_QT_BUILD_OSM3S=ON
 cmake --build build-qt -j
 ./build-qt/opencpn-qt --demo        # Simulator und Demo-Route
-(cd build-qt && ctest)              # Unit-, Karten-, GRIB-, OSM-, Media- und UI-Tests
+(cd build-qt && ctest)              # Unit-, Karten-, GRIB-, OSM-, Planungs-, Media- und UI-Tests
 ```
 
 Daten (Basiskarte, `s57data`, `tcdata`) werden automatisch im Quellbaum
@@ -430,6 +498,9 @@ qt/
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
 │   ├── RoutePlanner       Routing über Wasser (Raster, A*, Begradigung)
 │   ├── PassagePlanner     Törnplanung (Polare, Kreuzen, Zeitfenster, Sonne)
+│   ├── Polar              Polardaten (Formate, Interpolation, VMG)
+│   ├── WeatherModels      Modellvorhersagen entlang der Route (Open-Meteo)
+│   ├── Voyage             gespeicherte Reisen und Offline-Vorbereitung
 │   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge,
 │   │                      OnlineOsm (öffentliche Server, Kachel-Cache, Nominatim)
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
@@ -441,7 +512,9 @@ qt/
 │   ├── TracksPage, TidesPage, WeatherPage
 │   ├── OfflinePage        Gebietsauswahl-Leiste, Offline-Seite, OSM-Ebene
 │   ├── RoutePlanPanel     Routenplanung von Hafen zu Hafen
-│   ├── PassagePanel       Törnplanung mit Zeitleiste und Etappen
+│   ├── PassagePanel       Törnplanung, Modell-Matrix, Etappen
+│   ├── PolarPanel         Polardiagramm, Import, Tabelleneditor
+│   ├── VoyageList         Reisen (offline)
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

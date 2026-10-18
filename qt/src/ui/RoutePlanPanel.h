@@ -17,6 +17,7 @@ class QLineEdit;
 class QPushButton;
 class QVBoxLayout;
 class PassagePanel;
+struct Voyage;
 
 /** A start or destination: harbour, marina, mark or position. */
 struct Place {
@@ -24,6 +25,7 @@ struct Place {
   double lat = 0, lon = 0;
   bool valid = false;
   QString detail;  // e.g. the region of an online result
+  int rank = 0;    // order in the suggestions
 };
 
 /** Dashed preview of the calculated route. */
@@ -87,12 +89,15 @@ public:
   explicit RoutePlanPanel(ChartView* chart, QWidget* parent = nullptr);
   void setFrom(const Place& p);
   void setTo(const Place& p);
+  /** Shows a stored voyage (route, passage inputs, stored forecasts). */
+  void openVoyage(const Voyage& v);
 
 private:
   void calculate();
   void finished();
   void save(bool navigate);
   void clearResult();
+  void storeVoyage();
 
   ChartView* m_chart;
   PlannedRouteLayer* m_layer;
@@ -101,6 +106,7 @@ private:
   QPushButton* m_calc;
   QLabel* m_result;
   QWidget* m_actions;
+  QWidget* m_actionsBox;
   PassagePanel* m_passage;
   QFutureWatcher<RoutePlanResult> m_watcher;
   RoutePlanResult m_plan;
