@@ -26,6 +26,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![ENC](doc/screenshot-enc.png) | ![Wetter](doc/screenshot-weather.png) |
 | **Gezeiten · Tag** | **Aktive Route · Nacht** |
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
+| **Kartenausschnitt für Offline-Daten wählen** | **Offline-Gebiete · lokale Overpass-Instanz** |
+| ![Auswahl](doc/screenshot-offline-select.png) | ![Offline](doc/screenshot-offline.png) |
 
 ## Funktionsumfang
 
@@ -42,6 +44,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **GRIB1/GRIB2**: Wind, Böen, Luftdruck, Wellen; Zeitleiste und Animation | ✅ |
 | **NOAA-GFS-Download** (0,25°) für den sichtbaren Bereich | ✅ |
 | **Track-Aufzeichnung** mit Ausdünnung, GPX-Import/-Export | ✅ |
+| **Offline-Gebiete**: Kartenausschnitt wählen, OSM-Daten laden, **lokale Overpass-Instanz** (osm-3s) | ✅ |
+| Häfen, Marinas, Tankstellen, Slipanlagen und Seezeichen aus OSM auf der Karte, Offline-Suche | ✅ |
 | **Plugin-API** (Qt-Plugins) mit **Media-Plugin** (Spotify, YouTube Music) | ✅ |
 | NMEA 0183: RMC, GGA, GLL, VTG, HDT, THS inkl. Checksumme | ✅ |
 | AIS: Typen 1/2/3, 5, 18, 19, 24; CPA/TCPA und Kollisionsalarm | ✅ |
@@ -154,6 +158,54 @@ berechnet.
   Bodendruck, 0–72 h in 3-Stunden-Schritten) direkt von NOMADS für den
   sichtbaren Kartenausschnitt.
 
+### Offline-Gebiete und lokale Overpass-Instanz
+
+Unter **Offline** legt man Gebiete an, deren OpenStreetMap-Daten (Häfen,
+Marinas, Tankstellen, Slipanlagen, Seezeichen, Küste, Orte) lokal
+gespeichert und in eine **eigene Overpass-API-Instanz** importiert werden.
+Abfragen laufen danach ohne Internet.
+
+**Kartenausschnitt wählen** („Bereich auf Karte wählen“, Rechtsklick →
+„Gebiet offline speichern…“):
+
+* Ein Rahmen liegt über der Karte, der Bereich außerhalb wird abgedunkelt.
+* **Ecken und Kanten ziehen** ändert die Größe, **im Rahmen ziehen**
+  verschiebt ihn, **außerhalb ziehen** schwenkt die Karte; Zoomen geht wie
+  gewohnt. Alles ist auch per Touch bedienbar.
+* Die Leiste oben zeigt Breite × Höhe und Fläche und bietet
+  Vorlagen: **Sichtbarer Bereich**, **Um das Boot** (± 8 sm) und
+  **Entlang der Route** (aktive oder letzte Route, 3 sm Rand).
+* Schon geladene Gebiete werden grün gestrichelt angezeigt.
+* Name eingeben, **Laden** – Fortschritt und Abbruch auf der Offline-Seite.
+
+**Download:** zuerst über einen Overpass-Server (Standard:
+`overpass-api.de`, einstellbar). Ist er nicht erreichbar, lädt die App
+kleinere Gebiete (bis 0,25 Quadratgrad) kachelweise über die
+OpenStreetMap-API und teilt zu volle Kacheln automatisch. Eigene
+`.osm`-Dateien lassen sich importieren (Kommandozeile: `--import-osm`).
+Die Kacheln werden zusammengeführt (IDs eindeutig und sortiert) und als
+`regions/<id>.osm` gespeichert; alle Gebiete zusammen ergeben
+`combined.osm`.
+
+**Overpass-Backend** (Offline → Overpass-Einstellungen):
+
+| Backend | Plattform | Einrichtung |
+| --- | --- | --- |
+| **Lokal (osm-3s)** | Linux, macOS | `-DOCPN_QT_BUILD_OSM3S=ON` baut `update_database`, `osm3s_query` und `dispatcher` mit (Overpass 0.7.62.11, braucht `libexpat1-dev zlib1g-dev`, optional `liblz4-dev`) und installiert sie nach `libexec/osm-3s/bin`. Gefunden wird osm-3s auch über `OPENCPN_OSM3S_BIN`, den `PATH` oder `~/.local/osm-3s/bin`. |
+| **HTTP** | alle, v. a. Windows | `docker compose -f qt/docker/overpass/docker-compose.yml up -d` startet das Image `wiktorn/overpass-api`, das `combined.osm` importiert und unter `http://localhost:12345/api/interpreter` antwortet. Ebenso geht jeder andere Overpass-Server. |
+
+Beim lokalen Backend ruft die App nach jeder Änderung
+`update_database --db-dir=… --meta=no` mit `combined.osm` auf und fragt die
+Datenbank direkt mit `osm3s_query` ab, ein Dispatcher-Dienst ist nicht nötig.
+Die Daten liegen im Benutzerdatenordner unter `overpass/` (Linux:
+`~/.local/share/opencpn/opencpn-qt/overpass`).
+
+Auf der Karte zeigt die Ebene **OSM-Details** ab Hafenmaßstab Marinas,
+Häfen, Tankstellen, Ankerplätze und Slipanlagen, bei noch größerem Maßstab
+auch Tonnen und Baken in ihrer Farbe. Überlappende Symbole und Beschriftungen
+werden ausgeblendet. Die **Offline-Suche** findet Namen (auch
+`seamark:name`) in allen Gebieten; ein Tipp auf das Ergebnis zeigt den Ort.
+
 ### Plugins und Media-Plugin
 
 Die Plugin-API (`src/api/OcpnPlugin.h`) basiert auf Qt-Plugins
@@ -206,11 +258,13 @@ Voraussetzungen:
 ```bash
 # Debian/Ubuntu
 sudo apt install qt6-base-dev qt6-svg-dev libqt6serialport6-dev dbus
+# für die lokale Overpass-Instanz zusätzlich
+sudo apt install libexpat1-dev zlib1g-dev liblz4-dev
 
-cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release
+cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release -DOCPN_QT_BUILD_OSM3S=ON
 cmake --build build-qt -j
 ./build-qt/opencpn-qt --demo        # Simulator und Demo-Route
-(cd build-qt && ctest)              # Unit-, Karten-, GRIB-, Media- und UI-Tests
+(cd build-qt && ctest)              # Unit-, Karten-, GRIB-, OSM-, Media- und UI-Tests
 ```
 
 Daten (Basiskarte, `s57data`, `tcdata`) werden automatisch im Quellbaum
@@ -226,11 +280,14 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--view cockpit\|chart` | Startansicht |
 | `--day` | startet im Tagmodus |
 | `--page N` | öffnet das Seitenpanel N (0 Karten, 1 Routen …) |
+| `--import-osm datei.osm` | importiert eine OSM-XML-Datei als Offline-Gebiet |
+| `--select-area` | startet die Auswahl eines Kartenausschnitts |
 | `--fresh` | nutzt temporäre Einstellungen und Daten; die echte Konfiguration bleibt unberührt |
 | `--screenshot datei.png [--size 1600x1000] [--delay ms]` | speichert einen Screenshot und beendet das Programm, auch mit `QT_QPA_PLATFORM=offscreen` |
 
 Tastatur: `+`/`-` zoomen, `F` folgt dem Schiff, `F11` schaltet Vollbild um,
-`Esc` schließt das Panel bzw. bricht die Routeneingabe ab, `Backspace`
+`Esc` schließt das Panel bzw. bricht die Routeneingabe oder die
+Gebietsauswahl ab, `Backspace`
 entfernt den letzten Routenpunkt. Ein Rechtsklick auf die Karte öffnet das
 Kontextmenü.
 
@@ -261,6 +318,10 @@ aktiv.
   ist bisher nur unter Linux/macOS getestet.
 * Media: Unter Windows und macOS gibt es noch keine Systemmediensteuerung;
   dort funktioniert nur die Spotify-Web-API.
+* Overpass: osm-3s lässt sich nicht unter Windows bauen, dort bleibt Docker
+  (HTTP-Backend). Gebiete werden komplett neu importiert, Minutendiffs werden
+  nicht eingespielt („Aktualisieren“ lädt das Gebiet neu). Die OSM-Daten
+  ersetzen keine amtliche Seekarte.
 
 ## Architektur
 
@@ -276,6 +337,7 @@ qt/
 │   ├── GpxIO, TrackRecorder
 │   ├── Tides              harmonische Gezeitenvorhersage
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
+│   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
 ├── src/ui/                Widgets (libocpnqt_ui.so)
 │   ├── Theme, Icons, GlassPanel
@@ -283,9 +345,11 @@ qt/
 │   ├── ChartView, MapLayer   Karte (Render-Thread) + Overlay-Ebenen
 │   ├── Overlays, SideDrawer, DrawerPages
 │   ├── TracksPage, TidesPage, WeatherPage
+│   ├── OfflinePage        Gebietsauswahl-Leiste, Offline-Seite, OSM-Ebene
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)
+├── docker/overpass/       Overpass-API als Docker-Container (HTTP-Backend)
 └── tests/                 QtTest-Suiten + Testdaten (tests/data)
 ```
 

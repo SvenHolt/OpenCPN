@@ -24,6 +24,10 @@ constexpr double kMinScale = 600;
 constexpr double kMaxScale = 1 << 24;
 constexpr double kDetailScale = 14000;  // switch to the detailed basemap
 
+// Area selection handles
+constexpr int kN = 1, kS = 2, kW = 4, kE = 8, kMove = 16;
+constexpr double kMinAreaSpan = 0.002;  // degrees
+
 QPointF wrapWorld(QPointF w) {
   w.setX(w.x() - std::floor(w.x()));
   w.setY(qBound(0.0, w.y(), 1.0));
@@ -498,6 +502,7 @@ void ChartView::paintEvent(QPaintEvent*) {
   drawAis(p);
   drawOwnShip(p);
   drawLayers(p, true);
+  drawAreaSelection(p);
   drawScaleBar(p);
 }
 
@@ -906,12 +911,49 @@ void ChartView::mousePressEvent(QMouseEvent* e) {
   m_dragging = false;
   m_velocity = {};
   m_moveClock.restart();
+  m_areaHit = 0;
+  if (m_mode == Mode::AreaSelect && e->button() == Qt::LeftButton) {
+    m_areaHit = areaHitTest(e->position());
+    m_areaPressBox = m_area;
+    geoPos(e->position(), m_areaPressLat, m_areaPressLon);
+  }
 }
 
 void ChartView::mouseMoveEvent(QMouseEvent* e) {
   m_mousePos = e->position();
   if (!(e->buttons() & Qt::LeftButton)) {
     if (m_mode == Mode::RouteCreate) update();
+    if (m_mode == Mode::AreaSelect) updateAreaCursor(e->position());
+    return;
+  }
+  if (m_areaHit) {
+    m_dragging = true;
+    double lat, lon;
+    geoPos(e->position(), lat, lon);
+    const double dLat = lat - m_areaPressLat;
+    double dLon = lon - m_areaPressLon;
+    if (dLon > 180) dLon -= 360;
+    if (dLon < -180) dLon += 360;
+    GeoBox b = m_areaPressBox;
+    if (m_areaHit == kMove) {
+      const double h = b.north - b.south, w = b.east - b.west;
+      b.south = qBound(-85.0, b.south + dLat, 85.0 - h);
+      b.north = b.south + h;
+      b.west = qBound(-180.0, b.west + dLon, 180.0 - w);
+      b.east = b.west + w;
+    } else {
+      if (m_areaHit & kN)
+        b.north = qBound(b.south + kMinAreaSpan, b.north + dLat, 85.0);
+      if (m_areaHit & kS)
+        b.south = qBound(-85.0, b.south + dLat, b.north - kMinAreaSpan);
+      if (m_areaHit & kE)
+        b.east = qBound(b.west + kMinAreaSpan, b.east + dLon, 180.0);
+      if (m_areaHit & kW)
+        b.west = qBound(-180.0, b.west + dLon, b.east - kMinAreaSpan);
+    }
+    m_area = b;
+    emit areaChanged(m_area);
+    update();
     return;
   }
   const QPointF d = e->position() - m_lastPos;
@@ -936,6 +978,11 @@ void ChartView::mouseReleaseEvent(QMouseEvent* e) {
       setCursor(Qt::CrossCursor);
     else
       unsetCursor();
+    if (m_mode == Mode::AreaSelect) updateAreaCursor(e->position());
+    if (m_areaHit) {
+      m_areaHit = 0;
+      return;
+    }
     if (m_moveClock.elapsed() < 80 &&
         std::hypot(m_velocity.x(), m_velocity.y()) > 0.25)
       m_kinetic.start();
@@ -954,6 +1001,7 @@ void ChartView::mouseReleaseEvent(QMouseEvent* e) {
     update();
     return;
   }
+  if (m_mode == Mode::AreaSelect) return;
   // Hit test: AIS targets first, then marks.
   quint32 bestMmsi = 0;
   double best = 20;
@@ -1045,4 +1093,183 @@ QVector<Waypoint> ChartView::finishRouteCreate() {
   m_pending.clear();
   update();
   return pts;
+}
+
+// --------------------------------------------------------------------------
+// Area selection
+
+GeoBox ChartView::visibleArea() const {
+  const QRectF r(m_insetLeft, 0, std::max(1, width() - m_insetLeft),
+                 std::max(1, height() - m_insetBottom));
+  GeoBox b{90, 180, -90, -180};
+  for (const QPointF& c :
+       {r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight()}) {
+    double lat, lon;
+    geoPos(c, lat, lon);
+    b.south = std::min(b.south, lat);
+    b.north = std::max(b.north, lat);
+    b.west = std::min(b.west, lon);
+    b.east = std::max(b.east, lon);
+  }
+  b.south = std::max(b.south, -85.0);
+  b.north = std::min(b.north, 85.0);
+  return b;
+}
+
+void ChartView::startAreaSelect(const GeoBox& initial) {
+  if (m_mode == Mode::RouteCreate) finishRouteCreate();
+  GeoBox b = initial;
+  if (!b.isValid()) {
+    // The central part of the visible area.
+    b = visibleArea();
+    const double h = (b.north - b.south) * 0.2, w = (b.east - b.west) * 0.2;
+    b = GeoBox{b.south + h, b.west + w, b.north - h, b.east - w};
+  }
+  m_mode = Mode::AreaSelect;
+  setFollow(false);
+  setSelectedArea(b);
+}
+
+void ChartView::setSelectedArea(const GeoBox& box) {
+  m_area = box;
+  emit areaChanged(m_area);
+  update();
+}
+
+void ChartView::finishAreaSelect() {
+  m_mode = Mode::Browse;
+  m_areaHit = 0;
+  unsetCursor();
+  update();
+}
+
+int ChartView::areaHitTest(const QPointF& pos) const {
+  if (m_mode != Mode::AreaSelect || !m_area.isValid()) return 0;
+  const GeoBox& b = m_area;
+  const double midLat = (b.north + b.south) / 2, midLon = (b.west + b.east) / 2;
+  const struct {
+    double lat, lon;
+    int hit;
+  } handles[] = {{b.north, b.west, kN | kW}, {b.north, b.east, kN | kE},
+                 {b.south, b.west, kS | kW}, {b.south, b.east, kS | kE},
+                 {b.north, midLon, kN},      {b.south, midLon, kS},
+                 {midLat, b.west, kW},       {midLat, b.east, kE}};
+  // Touch friendly radius; corners win over edge handles.
+  for (const auto& h : handles) {
+    const QPointF s = screenPos(h.lat, h.lon);
+    if (std::hypot(s.x() - pos.x(), s.y() - pos.y()) < 22) return h.hit;
+  }
+  QPolygonF poly;
+  poly << screenPos(b.north, b.west) << screenPos(b.north, b.east)
+       << screenPos(b.south, b.east) << screenPos(b.south, b.west);
+  if (poly.containsPoint(pos, Qt::OddEvenFill)) return kMove;
+  return 0;
+}
+
+void ChartView::updateAreaCursor(const QPointF& pos) {
+  switch (areaHitTest(pos)) {
+    case kN:
+    case kS:
+      setCursor(Qt::SizeVerCursor);
+      break;
+    case kW:
+    case kE:
+      setCursor(Qt::SizeHorCursor);
+      break;
+    case kN | kW:
+    case kS | kE:
+      setCursor(Qt::SizeFDiagCursor);
+      break;
+    case kN | kE:
+    case kS | kW:
+      setCursor(Qt::SizeBDiagCursor);
+      break;
+    case kMove:
+      setCursor(Qt::SizeAllCursor);
+      break;
+    default:
+      unsetCursor();
+  }
+}
+
+void ChartView::drawAreaSelection(QPainter& p) {
+  if (m_mode != Mode::AreaSelect || !m_area.isValid()) return;
+  const Palette& pal = Theme::p();
+  const auto poly = [this](const GeoBox& b) {
+    QPolygonF r;
+    r << screenPos(b.north, b.west) << screenPos(b.north, b.east)
+      << screenPos(b.south, b.east) << screenPos(b.south, b.west);
+    return r;
+  };
+
+  // Already downloaded regions.
+  QColor done = pal.success;
+  done.setAlpha(170);
+  for (const OsmRegion& r : OverpassService::instance().regions()) {
+    const QPolygonF rp = poly(r.box);
+    QColor fill = done;
+    fill.setAlpha(28);
+    p.setBrush(fill);
+    p.setPen(QPen(done, 1.5, Qt::DashLine));
+    p.drawPolygon(rp);
+    drawHaloText(p, rp.boundingRect().bottomLeft() + QPointF(8, -10), r.name,
+                 Theme::font(12, QFont::DemiBold), pal.text,
+                 pal.dark ? QColor(0, 0, 0, 160) : QColor(255, 255, 255, 200));
+  }
+
+  // Dim everything outside the selection.
+  const QPolygonF sel = poly(m_area);
+  QPainterPath outside;
+  outside.addRect(rect());
+  QPainterPath inside;
+  inside.addPolygon(sel);
+  inside.closeSubpath();
+  p.setPen(Qt::NoPen);
+  p.setBrush(QColor(4, 10, 20, pal.dark ? 130 : 90));
+  p.drawPath(outside.subtracted(inside));
+
+  // Rule of thirds guides, like a camera crop.
+  QColor guide = pal.accentBright;
+  guide.setAlpha(60);
+  p.setPen(QPen(guide, 1));
+  for (double f : {1.0 / 3, 2.0 / 3}) {
+    p.drawLine(sel[0] + (sel[3] - sel[0]) * f, sel[1] + (sel[2] - sel[1]) * f);
+    p.drawLine(sel[0] + (sel[1] - sel[0]) * f, sel[3] + (sel[2] - sel[3]) * f);
+  }
+
+  // Beyond the OpenStreetMap API fallback limit: only Overpass servers or
+  // file imports can deliver the data.
+  const bool large = m_area.areaDeg2() > OverpassService::kMaxApiArea;
+  const QColor edge = large ? pal.warning : pal.accentBright;
+  p.setBrush(Qt::NoBrush);
+  p.setPen(QPen(edge, 2.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+  p.drawPolygon(sel);
+
+  // Handles: round corners, bars on the edges.
+  for (int i = 0; i < 4; ++i) {
+    p.setPen(QPen(edge, 3));
+    p.setBrush(Qt::white);
+    p.drawEllipse(sel[i], 9, 9);
+    const QPointF mid = (sel[i] + sel[(i + 1) % 4]) / 2;
+    const QLineF dir(sel[i], sel[(i + 1) % 4]);
+    p.save();
+    p.translate(mid);
+    p.rotate(-dir.angle());
+    p.setPen(QPen(edge, 2));
+    p.drawRoundedRect(QRectF(-14, -5, 28, 10), 5, 5);
+    p.restore();
+  }
+
+  // Size pill centered below the selection (the toolbar sits on top).
+  const auto& cfg = AppSettings::instance();
+  const QString text = QStringLiteral("%1 × %2").arg(
+      cfg.distanceText(m_area.widthNm()), cfg.distanceText(m_area.heightNm()));
+  const QFont f = Theme::font(12, QFont::DemiBold);
+  const double tw = QFontMetricsF(f).horizontalAdvance(text) + 16;
+  QPointF bottom = sel[0];
+  for (const QPointF& q : sel)
+    if (q.y() > bottom.y()) bottom = q;
+  const QPointF anchor((sel[2].x() + sel[3].x()) / 2 - tw / 2,
+                       std::min(height() - 40.0, bottom.y() + 26));
+  drawPill(p, anchor, text, edge, large ? QColor(20, 20, 20) : Qt::white);
 }

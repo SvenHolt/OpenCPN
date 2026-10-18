@@ -81,6 +81,16 @@ const QHash<QString, QString>& bodies() {
        R"(<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/><circle cx="12" cy="18" r="1.4" fill="currentColor"/>)"},
       {"edit",
        R"(<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>)"},
+      {"download",
+       R"(<path d="M12 4v11"/><path d="M7 10.5l5 5 5-5"/><path d="M5 20h14"/>)"},
+      {"refresh", R"(<path d="M19 8a8 8 0 1 0 1 6"/><path d="M20 3v5h-5"/>)"},
+      {"crop", R"(<path d="M7 3v14h14"/><path d="M3 7h14v14"/>)"},
+      {"anchor",
+       R"(<circle cx="12" cy="5" r="2"/><path d="M12 7v14"/><path d="M8 11h8"/><path d="M4 14a8 7 0 0 0 16 0"/>)"},
+      {"fuel",
+       R"(<path d="M5 20V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15"/><path d="M4 20h11"/><path d="M7 8h5"/><path d="M14 10h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V8l-3-3"/>)"},
+      {"database",
+       R"(<ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/>)"},
   };
   return b;
 }

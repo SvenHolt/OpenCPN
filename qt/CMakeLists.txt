@@ -79,6 +79,8 @@ set(OCPN_QT_CORE_SOURCES
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
   src/core/charts/ChartDatabase.cpp
+  src/core/osm/OsmMerge.cpp
+  src/core/osm/Overpass.cpp
 )
 
 # Core and UI are shared libraries so that plugins share the application's
@@ -110,6 +112,7 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/PluginManager.cpp
   src/ui/TracksPage.cpp
   src/ui/TidesPage.cpp
+  src/ui/OfflinePage.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp
@@ -138,6 +141,50 @@ install(DIRECTORY src/api src/ui src/core
 install(DIRECTORY ../data/s57data ../data/tcdata DESTINATION share/opencpn)
 install(DIRECTORY ../data/basemap_shp DESTINATION share/opencpn)
 
+# Local Overpass API instance (osm-3s) for offline OSM regions. Optional:
+# the application finds an installed osm-3s too, and on Windows the
+# Overpass Docker image is used through its HTTP endpoint instead.
+option(OCPN_QT_BUILD_OSM3S
+  "Download and build the osm-3s (Overpass API) binaries" OFF)
+if(OCPN_QT_BUILD_OSM3S)
+  if(WIN32)
+    message(FATAL_ERROR "osm-3s does not build on Windows; use Docker "
+                        "(see qt/docker/overpass) instead.")
+  endif()
+  include(ExternalProject)
+  include(ProcessorCount)
+  ProcessorCount(OSM3S_JOBS)
+  if(OSM3S_JOBS EQUAL 0)
+    set(OSM3S_JOBS 2)
+  endif()
+  find_library(OSM3S_LZ4 lz4)
+  set(OSM3S_CONFIGURE_ARGS --disable-shared)
+  if(OSM3S_LZ4)
+    list(APPEND OSM3S_CONFIGURE_ARGS --enable-lz4)
+  endif()
+  set(OSM3S_BINARIES update_database osm3s_query dispatcher)
+  set(OSM3S_DIR ${CMAKE_BINARY_DIR}/osm-3s)
+  set(OSM3S_COPY ${CMAKE_COMMAND} -E make_directory ${OSM3S_DIR}/bin)
+  foreach(b ${OSM3S_BINARIES})
+    list(APPEND OSM3S_TARGETS bin/${b})
+    list(APPEND OSM3S_COPY COMMAND ${CMAKE_COMMAND} -E copy
+      <BINARY_DIR>/bin/${b} ${OSM3S_DIR}/bin/${b})
+  endforeach()
+  ExternalProject_Add(osm3s
+    URL https://dev.overpass-api.de/releases/osm-3s_v0.7.62.11.tar.gz
+    URL_HASH SHA256=ff9ab837034c25a1956ff638e9af66a7f36f6cbaffc97d71429d1aa8b0a929ba
+    DOWNLOAD_EXTRACT_TIMESTAMP ON
+    BUILD_IN_SOURCE ON
+    CONFIGURE_COMMAND <SOURCE_DIR>/configure ${OSM3S_CONFIGURE_ARGS}
+    BUILD_COMMAND make -j${OSM3S_JOBS} ${OSM3S_TARGETS}
+    INSTALL_COMMAND ${OSM3S_COPY})
+  add_dependencies(opencpn-qt osm3s)
+  foreach(b ${OSM3S_BINARIES})
+    install(PROGRAMS ${OSM3S_DIR}/bin/${b}
+      DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/osm-3s/bin)
+  endforeach()
+endif()
+
 # Plugins are built into <build>/plugins, where the application finds them.
 add_subdirectory(plugins/media)
 
@@ -165,6 +212,16 @@ if(OCPN_QT_BUILD_TESTS)
     target_compile_definitions(ocpnqt_grib_tests PRIVATE
       OCPN_QT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
     add_test(NAME ocpnqt_grib_tests COMMAND ocpnqt_grib_tests)
+    add_executable(ocpnqt_osm_tests tests/test_osm.cpp)
+    target_link_libraries(ocpnqt_osm_tests PRIVATE ocpnqt_core Qt6::Test)
+    target_compile_definitions(ocpnqt_osm_tests PRIVATE
+      OCPN_QT_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
+    add_test(NAME ocpnqt_osm_tests COMMAND ocpnqt_osm_tests)
+    if(OCPN_QT_BUILD_OSM3S)
+      add_dependencies(ocpnqt_osm_tests osm3s)
+      set_tests_properties(ocpnqt_osm_tests PROPERTIES
+        ENVIRONMENT "OPENCPN_OSM3S_BIN=${OSM3S_DIR}/bin")
+    endif()
     add_executable(ocpnqt_media_tests tests/test_media.cpp)
     target_link_libraries(ocpnqt_media_tests PRIVATE media_pi_core Qt6::Test)
     if(TARGET Qt6::DBus)

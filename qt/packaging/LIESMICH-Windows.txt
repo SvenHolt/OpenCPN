@@ -24,6 +24,12 @@ Zum Ausprobieren
 * "Wetter" -> "Windvorhersage laden" (NOAA GFS, braucht Internet), oder
   "GRIB-Datei öffnen": samples\gfs_simple.grb2
 * "Gezeiten": Stationen in der Nähe des Bootes bzw. der Kartenmitte
+* "Offline" -> "Bereich auf Karte wählen": Rahmen an Ecken/Kanten ziehen,
+  Namen eingeben, "Laden". Häfen, Marinas, Tankstellen und Seezeichen aus
+  OpenStreetMap erscheinen dann auf der Karte, die Offline-Suche findet
+  sie. Für Abfragen ohne Internet braucht Windows eine Overpass-Instanz
+  in Docker: overpass\docker-compose.yml (Anleitung in der Datei), dann
+  unter "Overpass-Einstellungen" das Backend "HTTP" wählen.
 * "Daten": NMEA über UDP (Port 10110), TCP oder seriell (COM-Port)
 * "Media": Spotify über die Spotify-Web-API (Client-ID nötig, siehe
   Anleitung auf der Seite). Die automatische Erkennung von Spotify-Desktop

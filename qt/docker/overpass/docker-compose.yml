@@ -1,0 +1,38 @@
+# Local Overpass API instance for OpenCPN Qt (Windows, macOS, Linux).
+#
+# OpenCPN writes all offline regions into one file, combined.osm, in its
+# data folder. This container imports that file and serves Overpass QL at
+# http://localhost:12345/api/interpreter ("HTTP" backend in the
+# Offline > Overpass settings).
+#
+#   Windows: set OCPN_OVERPASS_DATA=%APPDATA%\opencpn\opencpn-qt\overpass
+#   macOS:   export OCPN_OVERPASS_DATA="$HOME/Library/Application Support/opencpn/opencpn-qt/overpass"
+#   Linux:   default below
+#
+#   docker compose up -d
+#
+# After adding or removing regions, re-import:
+#
+#   docker compose down -v && docker compose up -d
+services:
+  overpass:
+    image: wiktorn/overpass-api:v0.7.62.11
+    container_name: opencpn-overpass
+    ports:
+      - "12345:80"
+    environment:
+      OVERPASS_MODE: init
+      OVERPASS_META: "no"
+      OVERPASS_PLANET_URL: file:///data/combined.osm
+      # The image expects a bzip2 compressed planet file.
+      OVERPASS_PLANET_PREPROCESS: >-
+        mv /db/planet.osm.bz2 /db/planet.osm && bzip2 /db/planet.osm
+      OVERPASS_STOP_AFTER_INIT: "false"
+      OVERPASS_RULES_LOAD: 0
+    volumes:
+      - ${OCPN_OVERPASS_DATA:-~/.local/share/opencpn/opencpn-qt/overpass}:/data:ro
+      - overpass-db:/db
+    restart: unless-stopped
+
+volumes:
+  overpass-db:

@@ -16,6 +16,7 @@
 #include "core/NavStore.h"
 #include "core/Shapefile.h"
 #include "core/charts/ChartDatabase.h"
+#include "core/osm/Overpass.h"
 
 class QGestureEvent;
 class MapLayer;
@@ -30,7 +31,7 @@ struct LandData {
 class ChartView : public QWidget {
   Q_OBJECT
 public:
-  enum class Mode { Browse, RouteCreate };
+  enum class Mode { Browse, RouteCreate, AreaSelect };
 
   explicit ChartView(QWidget* parent = nullptr);
   ~ChartView() override;
@@ -71,6 +72,16 @@ public:
   QVector<Waypoint> finishRouteCreate();
   int pendingRoutePoints() const { return int(m_pending.size()); }
 
+  // Area selection (offline regions) --------------------------------------
+  /** Shows a resizable rectangle; an invalid box starts with the middle of
+   *  the visible area. */
+  void startAreaSelect(const GeoBox& initial = {});
+  GeoBox selectedArea() const { return m_area; }
+  void setSelectedArea(const GeoBox& box);
+  /** Box of the visible chart area (without overlays). */
+  GeoBox visibleArea() const;
+  void finishAreaSelect();
+
   void setSelectedAis(quint32 mmsi) {
     m_selectedAis = mmsi;
     update();
@@ -95,6 +106,7 @@ signals:
   void navigationRequested();
   void followChanged(bool on);
   void routeEditChanged(int points);
+  void areaChanged(const GeoBox& box);
   void aisTargetClicked(quint32 mmsi);
   void waypointClicked(const QString& id);
   void contextRequested(double lat, double lon, const QPoint& globalPos);
@@ -147,6 +159,10 @@ private:
   void drawScaleBar(QPainter& p);
   void drawChartOutlines(QPainter& p);
   void drawLayers(QPainter& p, bool above);
+  void drawAreaSelection(QPainter& p);
+  /** Handle under a screen position: bit mask of kN/kS/kW/kE, kMove or 0. */
+  int areaHitTest(const QPointF& pos) const;
+  void updateAreaCursor(const QPointF& pos);
 
   std::shared_ptr<const LandData> m_land;
   std::shared_ptr<const ChartList> m_charts;
@@ -186,4 +202,9 @@ private:
   Mode m_mode = Mode::Browse;
   QVector<Waypoint> m_pending;
   quint32 m_selectedAis = 0;
+
+  GeoBox m_area;
+  GeoBox m_areaPressBox;
+  int m_areaHit = 0;
+  double m_areaPressLat = 0, m_areaPressLon = 0;
 };

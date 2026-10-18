@@ -15,6 +15,7 @@ class MapControls;
 class BottomDock;
 class Toast;
 class RouteEditBar;
+class AreaSelectBar;
 class TargetCard;
 class SideDrawer;
 class CockpitView;
@@ -43,6 +44,8 @@ public:
   enum class View { Cockpit, Chart };
   void setView(View v);
   View view() const { return m_view; }
+  /** Lets the skipper frame an area for offline OSM data. */
+  void beginAreaSelect();
 
 protected:
   void resizeEvent(QResizeEvent*) override;
@@ -54,6 +57,8 @@ private:
   void showContextMenu(double lat, double lon, const QPoint& global);
   void beginRouteCreate();
   void endRouteCreate(bool save);
+  void applyAreaPreset(int preset);
+  void endAreaSelect(bool accept);
 
   ChartView* m_chart;
   InstrumentCard* m_instruments;
@@ -62,12 +67,14 @@ private:
   BottomDock* m_dock;
   Toast* m_toast;
   RouteEditBar* m_routeBar;
+  AreaSelectBar* m_areaBar;
   TargetCard* m_target;
   SideDrawer* m_drawer;
   QPropertyAnimation m_instrumentsAnim;
   QVector<QPair<QWidget*, Qt::Corner>> m_overlays;
   int m_routesSection = -1;
   int m_sailSection = -1;
+  int m_offlineSection = -1;
   CockpitView* m_cockpit;
   View m_view = View::Chart;
 };

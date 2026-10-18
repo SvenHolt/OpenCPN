@@ -8,6 +8,7 @@
 #include "core/Shapefile.h"
 #include "ui/ChartView.h"
 #include "ui/MainWindow.h"
+#include "ui/OfflinePage.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
 #include "core/Nmea.h"
@@ -62,6 +63,90 @@ private slots:
     NavStore::instance().activateRoute(id, 1);
     QVERIFY(NavStore::instance().guidance().active);
     QVERIFY(NavStore::instance().guidance().dtwNm > 0);
+  }
+
+  void areaSelectionByDragging() {
+    ChartView* chart = m_win->chart();
+    chart->centerOn(54.5, 10.3, false);
+    chart->setScale(2.0e5);
+    chart->startAreaSelect();
+    QCOMPARE(chart->mode(), ChartView::Mode::AreaSelect);
+    const GeoBox start = chart->selectedArea();
+    QVERIFY(start.isValid());
+    const GeoBox visible = chart->visibleArea();
+    QVERIFY(start.south > visible.south && start.north < visible.north);
+
+    const auto drag = [chart](QPointF from, QPointF to) {
+      const auto send = [chart](QEvent::Type t, QPointF pos,
+                                Qt::MouseButtons buttons) {
+        QMouseEvent e(t, pos, chart->mapToGlobal(pos), Qt::LeftButton, buttons,
+                      Qt::NoModifier);
+        QCoreApplication::sendEvent(chart, &e);
+      };
+      send(QEvent::MouseButtonPress, from, Qt::LeftButton);
+      for (int i = 1; i <= 10; ++i)
+        send(QEvent::MouseMove, from + (to - from) * (i / 10.0),
+             Qt::LeftButton);
+      send(QEvent::MouseButtonRelease, to, Qt::NoButton);
+    };
+    // South east corner handle resizes two edges.
+    const QPointF se = chart->screenPos(start.south, start.east);
+    drag(se, se + QPointF(80, 60));
+    GeoBox b = chart->selectedArea();
+    QVERIFY(b.east > start.east);
+    QVERIFY(b.south < start.south);
+    QCOMPARE(b.north, start.north);
+    QCOMPARE(b.west, start.west);
+
+    // Dragging inside moves the frame without resizing it.
+    const QPointF mid =
+        chart->screenPos((b.north + b.south) / 2, (b.west + b.east) / 2);
+    drag(mid + QPointF(30, 0), mid + QPointF(-70, 0));
+    const GeoBox moved = chart->selectedArea();
+    QVERIFY(moved.west < b.west);
+    QVERIFY(std::fabs((moved.east - moved.west) - (b.east - b.west)) < 1e-9);
+
+    // Dragging outside pans the chart; the frame stays at its place.
+    double lat0, lon0;
+    chart->center(lat0, lon0);
+    drag(QPointF(1300, 100), QPointF(1200, 150));
+    double lat1, lon1;
+    chart->center(lat1, lon1);
+    QVERIFY(lon1 > lon0);
+    QCOMPARE(chart->selectedArea().west, moved.west);
+
+    // Edges cannot be dragged across each other.
+    const QPointF n =
+        chart->screenPos(moved.north, (moved.west + moved.east) / 2);
+    drag(n, n + QPointF(0, 2000));
+    QVERIFY(chart->selectedArea().north > chart->selectedArea().south);
+
+    QTest::qWait(300);
+    const QString shot = qEnvironmentVariable("OCPN_QT_TEST_AREA_SHOT");
+    if (!shot.isEmpty()) m_win->grab().save(shot);
+    chart->finishAreaSelect();
+    QCOMPARE(chart->mode(), ChartView::Mode::Browse);
+  }
+
+  void poiClassification() {
+    const auto kind = [](std::initializer_list<std::pair<QString, QString>> t) {
+      OsmElement e;
+      for (const auto& [k, v] : t) e.tags.insert(k, v);
+      return OsmPoiLayer::classify(e);
+    };
+    using K = OsmPoiLayer::Kind;
+    QCOMPARE(kind({{"leisure", "marina"}}), K::Marina);
+    QCOMPARE(kind({{"seamark:type", "harbour"},
+                   {"seamark:harbour:category", "marina"}}),
+             K::Marina);
+    QCOMPARE(kind({{"seamark:type", "harbour"}}), K::Harbour);
+    QCOMPARE(kind({{"waterway", "fuel"}}), K::Fuel);
+    QCOMPARE(kind({{"leisure", "slipway"}}), K::Slipway);
+    QCOMPARE(kind({{"seamark:type", "anchorage"}}), K::Anchorage);
+    QCOMPARE(kind({{"seamark:type", "buoy_lateral"}}), K::Seamark);
+    QCOMPARE(kind({{"name", "x"}}), K::Other);
+    QVERIFY(OsmPoiLayer::queryFor(GeoBox{54, 10, 54.1, 10.2})
+                .contains("[bbox:54.000000,10.000000,54.100000,10.200000]"));
   }
 
   void screenToGeoRoundTrip() {

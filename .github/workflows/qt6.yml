@@ -38,10 +38,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qt6-base-dev qt6-svg-dev libqt6serialport6-dev libgl-dev dbus
+            qt6-base-dev qt6-svg-dev libqt6serialport6-dev libgl-dev dbus \
+            libexpat1-dev zlib1g-dev liblz4-dev
 
       - name: Configure
-        run: cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release
+        # With osm-3s, so the local Overpass instance is tested too.
+        run: >-
+          cmake -S qt -B build-qt -DCMAKE_BUILD_TYPE=Release
+          -DOCPN_QT_BUILD_OSM3S=ON
 
       - name: Build
         run: cmake --build build-qt --parallel
