@@ -6,11 +6,13 @@
 
 #include "core/AppSettings.h"
 #include "core/NavStore.h"
+#include "core/Passage.h"
 #include "ui/CockpitView.h"
 #include "ui/DrawerPages.h"
 #include "ui/SailPage.h"
 #include "ui/Icons.h"
 #include "ui/Overlays.h"
+#include "ui/PassagePage.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
 #include "ui/TidesPage.h"
@@ -47,6 +49,9 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   auto* ais = new AisPage(m_chart);
   addSection("chart", tr("Charts"), new ChartsPage(m_chart));
   m_routesSection = addSection("route", tr("Routes"), routes);
+  m_passage = new PassagePage(m_chart);
+  m_passageSection = addSection("anchor", tr("Passage"), m_passage);
+  m_chart->addLayer(new PassageLayer(this));
   addSection("pin", tr("Marks"), new MarksPage(m_chart));
   addSection("flag", tr("Tracks"), new TracksPage(m_chart));
   m_chart->addLayer(new TrackLayer(this));
@@ -282,6 +287,31 @@ void MainWindow::showContextMenu(double lat, double lon, const QPoint& global) {
   menu.addSeparator();
   menu.addAction(Icons::icon("route", pal.text, 18), tr("New route…"), this,
                  &MainWindow::beginRouteCreate);
+  menu.addSeparator();
+  // harbours and anchorages of the passage planner
+  if (const auto* h = PassageService::instance().nearest(lat, lon, 0.3)) {
+    const qint64 id = h->id;
+    menu.addAction(Icons::icon("anchor", pal.text, 18),
+                   tr("%1 – details…").arg(QString::fromStdString(h->name)),
+                   [this, id] {
+                     m_drawer->open(m_passageSection);
+                     m_passage->showView(PassagePage::Harbours);
+                     m_passage->harbours()->edit(id);
+                   });
+    menu.addAction(Icons::icon("navigate", pal.text, 18),
+                   tr("Plan passage to here"), [this, id] {
+                     m_drawer->open(m_passageSection);
+                     m_passage->planner()->setTo(id);
+                     m_passage->showView(PassagePage::Plan);
+                   });
+  } else {
+    menu.addAction(Icons::icon("anchor", pal.text, 18),
+                   tr("New harbour or anchorage here…"), [this, lat, lon] {
+                     m_drawer->open(m_passageSection);
+                     m_passage->showView(PassagePage::Harbours);
+                     m_passage->harbours()->newAt(lat, lon);
+                   });
+  }
   menu.exec(global);
 }
 

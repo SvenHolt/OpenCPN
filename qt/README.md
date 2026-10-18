@@ -27,6 +27,33 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Gezeiten · Tag** | **Aktive Route · Nacht** |
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
 
+## Törnplanung, Häfen und Logbuch
+
+Der Dock-Bereich **Passage** bündelt drei Ansichten im selben Glas-Design:
+
+* **Planung** – von Hafen/Ankerplatz zu Hafen/Ankerplatz. Die Route wird auf
+  dem Navigationsgitter von `tools/seachart` gesucht (Land, Tiefe gegen den
+  Tiefgang) und mit dem Wetter berechnet: eine geladene GRIB-Datei der
+  Wetterseite oder die offline gespeicherte Open-Meteo-Vorhersage. Einfache
+  Polare mit No-Go-Zone und Wellenabschlag, Motor unter einer Schwelle; die
+  Segelkonfiguration der Segelseite (Reffs, nur Motor) fließt ein. Ergebnis
+  mit Distanz, Dauer, Ankunft und Etappen, Vorschau auf der Karte, „Beste
+  Abfahrt“ (alle 3 h über zwei Tage), Route anlegen und **Törn starten**
+  (Route aktiv, Track, Logbuch).
+* **Häfen** – die eigene Liste der Häfen und Ankerplätze (aus OpenSeaMap
+  vorbefüllt) mit Notizen, Tiefe, UKW-Kanal, Bewertung und **Fotos**,
+  Restaurants/Geschäfte in der Nähe (OpenStreetMap) und Wetterverlauf.
+  Häfen erscheinen als Symbole auf der Karte; Rechtsklick auf die Karte legt
+  einen neuen an.
+* **Logbuch** – alle Törns mit Kennzahlen, Einträgen alle 15 Minuten
+  (Position, Fahrt, Kurs, gemessener oder vorhergesagter Wind), Notizen,
+  Track und HTML-Export. Ein laufender Törn wird nach einem Neustart
+  fortgesetzt.
+
+Die Daten (`seachart.db`, `logbook.db`, Fotos) liegen in
+`Dokumente/seachart/` und werden mit `tools/seachart` und der wx-Oberfläche
+geteilt; die Logik steckt in `libs/seachart`.
+
 ## Funktionsumfang
 
 | Bereich | Status |

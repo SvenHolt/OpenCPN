@@ -40,18 +40,44 @@ def _fmt_time(t):
     return datetime.datetime.fromtimestamp(t).strftime("%a %d.%m. %H:%M")
 
 
+# Same look as the OpenCPN Qt6 frontend (qt/src/ui/Theme.cpp): dark glass
+# cards at night, light cards by day (follows the system setting).
 CSS = """
-body{font-family:system-ui,sans-serif;margin:0;background:#f4f6f8;color:#1b2733}
-header{background:#0b3d5c;color:#fff;padding:16px}
-main{max-width:1000px;margin:auto;padding:12px}
-section{background:#fff;border-radius:8px;padding:12px 16px;margin:12px 0;
-box-shadow:0 1px 3px #0002}
-h2{margin:.2em 0}.kind{font-size:.8em;color:#456;font-weight:normal}
-table{border-collapse:collapse;font-size:.9em}td,th{padding:2px 8px;
-text-align:left;border-bottom:1px solid #e3e8ee}
-.photos img{max-height:180px;margin:4px;border-radius:4px}
-.wx td{text-align:center}.warn{color:#b00}
-nav a{margin-right:10px}small{color:#678}
+:root{--bg:#0a0f15;--panel:rgba(20,23,28,.94);--border:rgba(255,255,255,.07);
+--hover:rgba(255,255,255,.06);--text:#f3f5f8;--dim:#9aa3ae;--faint:#5b636d;
+--accent:#3e6ae1;--accent2:#5d8bff;--warn:#ffb020;--shadow:rgba(0,0,0,.35)}
+@media (prefers-color-scheme:light){:root{--bg:#d9e4ee;--panel:#fff;
+--border:rgba(0,0,0,.06);--hover:rgba(0,0,0,.04);--text:#14171c;
+--dim:#5b6470;--faint:#9aa1aa;--accent2:#2f5bd3;--warn:#e08a00;
+--shadow:rgba(20,30,50,.12)}}
+*{box-sizing:border-box}
+body{font:14px Inter,"SF Pro Display","Segoe UI Variable","Segoe UI",
+"Noto Sans",Roboto,"Helvetica Neue",Arial,sans-serif;margin:0;
+background:var(--bg);color:var(--text)}
+header{max-width:1000px;margin:auto;padding:28px 16px 4px}
+h1{font-size:30px;font-weight:300;margin:0 0 4px}
+header small,.dim{color:var(--dim);font-size:13px}
+main{max-width:1000px;margin:auto;padding:4px 16px 32px}
+nav{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+nav a{background:var(--hover);color:var(--text);text-decoration:none;
+padding:8px 14px;border-radius:12px;font-weight:600;font-size:13px}
+nav a:hover{background:var(--accent);color:#fff}
+section{background:var(--panel);border:1px solid var(--border);
+border-radius:22px;padding:18px 22px;margin:14px 0;
+box-shadow:0 10px 28px var(--shadow)}
+h2{margin:0 0 10px;font-size:22px;font-weight:600}
+h3{color:var(--faint);font-size:11px;font-weight:600;letter-spacing:1px;
+text-transform:uppercase;margin:18px 0 6px}
+.kind{font-size:12px;font-weight:600;color:var(--accent2);margin-left:8px;
+text-transform:uppercase;letter-spacing:1px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--dim);font-weight:500}
+a{color:var(--accent2)}
+.photos{display:flex;gap:10px;overflow-x:auto;padding:4px 0}
+.photos img{height:150px;border-radius:14px;display:block}
+.wx td{text-align:center}.warn,.warn td{color:var(--warn)}
+p{line-height:1.5}
 """
 
 
@@ -64,8 +90,8 @@ def write(store, out_dir, bounds, title, radius=1500):
     parts = ["<!doctype html><html lang=de><meta charset=utf-8>"
              "<meta name=viewport content='width=device-width'>"
              "<title>%s</title><style>%s</style>" % (html.escape(title), CSS),
-             "<header><h1>Hafenführer: %s</h1><small>%d Häfen und "
-             "Ankerplätze. Wetter: %s. Nicht zur Navigation.</small>"
+             "<header><h1>Hafenführer %s</h1><small>%d Häfen und "
+             "Ankerplätze · Wetter: %s · Nicht zur Navigation</small>"
              "</header><main><nav>" % (
                  html.escape(title), len(rows),
                  "Stand " + _fmt_time(fetched) if fetched else

@@ -18,6 +18,7 @@ class RouteEditBar;
 class TargetCard;
 class SideDrawer;
 class CockpitView;
+class PassagePage;
 
 class MainWindow : public QWidget, public PluginHost {
   Q_OBJECT
@@ -67,6 +68,8 @@ private:
   QPropertyAnimation m_instrumentsAnim;
   QVector<QPair<QWidget*, Qt::Corner>> m_overlays;
   int m_routesSection = -1;
+  int m_passageSection = -1;
+  PassagePage* m_passage = nullptr;
   int m_sailSection = -1;
   CockpitView* m_cockpit;
   View m_view = View::Chart;

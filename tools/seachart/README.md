@@ -40,6 +40,11 @@ pip install osmium       # optional, für .osm.pbf-Import (Geofabrik)
 
 Ohne Installation: `PYTHONPATH=tools/seachart python3 -m seachart …`
 
+**Windows:** `tools/seachart/windows/seachart.bat` doppelklicken – richtet
+beim ersten Start Python ein und bietet ein Menü. Eine fertige
+`seachart.exe` (ohne Python) baut der Workflow `seachart-windows.yml`; sie
+ist auch im Windows-Paket des Qt6-Frontends enthalten.
+
 Der S-57-Objektkatalog wird aus `data/s57data` dieses Repositories gelesen.
 Läuft das Tool außerhalb des Repositories, den Pfad mit `--s57data` oder der
 Umgebungsvariable `SEACHART_S57DATA` angeben (sonst wird ein installiertes
@@ -106,16 +111,70 @@ Für ein festes Gebiet ohne Route:
 seachart --db ostsee.db region --bbox 10.0,54.3,10.5,54.6 --scale 25000 --out charts/kiel
 ```
 
+### Häfen, Ankerplätze, POIs und Wetter
+
+`download` legt zusätzlich an (abschaltbar mit `--no-pois`, `--no-weather`,
+`--no-navgrid`):
+
+* **Häfen und Ankerplätze** aus OpenSeaMap als Ausgangsliste, die du selbst
+  pflegst – Einträge, die du bearbeitet hast, werden nie überschrieben:
+
+  ```sh
+  seachart harbours list
+  seachart harbours add --kind anchorage --name "Bucht" --lat 54.44 --lon 10.36 --notes "Sand, 3 m"
+  seachart harbours edit 12 --vhf 69 --depth 2.8 --facilities fuel,water,showers --rating 4
+  seachart harbours photo 12 einfahrt.jpg --caption "Einfahrt"
+  seachart harbours export haefen.csv     # bearbeiten, dann: harbours import haefen.csv
+  ```
+
+  Fotos werden nach `Dokumente/seachart/seachart_media/` kopiert.
+* **POIs** im Umkreis der Häfen aus OpenStreetMap (Restaurants,
+  Supermärkte, Tankstellen, Bootszubehör, Service, Sehenswertes):
+  `seachart pois [--poi-radius 1500]`
+* **Wetter** stündlich (Wind, Böen, Welle) von Open-Meteo, offline
+  gespeichert – vor dem Ablegen aktualisieren: `seachart weather --days 7`
+* **Navigationsgitter** (Land/Wasser/Tiefe) für die Routenberechnung in
+  OpenCPN: `seachart navgrid [--nav-resolution 0.002]` (feiner für enge
+  Durchfahrten)
+
+Beim Kartenbau entstehen im Kartenordner außerdem `guide.html` (Hafenführer
+mit Fotos, POIs und Wettertabelle) und `harbours.gpx` (Häfen und POIs als
+Wegpunkte für OpenCPN).
+
 ### 3. In OpenCPN einbinden
 
 *Optionen → Karten → Kartendateien → Verzeichnis hinzufügen* und den
 Ausgabeordner wählen. Beim ersten Öffnen erzeugt OpenCPN die SENC-Dateien.
+
+## Zusammenspiel mit OpenCPN
+
+Das Tool schreibt `seachart.db` (Häfen, Fotos, POIs, Wetter,
+Navigationsgitter) nach `Dokumente/seachart/`. Daneben legen die
+Oberflächen `logbook.db` an. Beide OpenCPN-Oberflächen lesen und schreiben
+dieselben Dateien:
+
+* **OpenCPN Qt6** (`qt/`): Dock-Bereich „Passage“ mit Planung, Häfen und
+  Logbuch im Design der neuen Oberfläche.
+* **OpenCPN (wx)**: Werkzeuge → „Passage Planner…“ / „Logbook…“ und das
+  Kontextmenü der Karte.
+
+Planung, Datenbankzugriff und Logbuch sind in `libs/seachart` (C++)
+gemeinsam implementiert. Hafenführer (`guide.html`) und Logbuch-Export
+verwenden die Farben und Karten des Qt6-Designs (Tag/Nacht nach
+Systemeinstellung).
+
+Unter Windows enthält das Paket des Qt6-Frontends (Workflow
+`qt6-windows.yml`) auch `seachart.exe` mit Startmenü
+(„Seekarten und Haefen (seachart).bat“).
 
 ## Aufbau
 
 | Modul          | Aufgabe                                                        |
 |----------------|----------------------------------------------------------------|
 | `sources.py`   | Overpass, ERDDAP, Import von .pbf/.osm/.json/.asc/.xyz          |
+| `harbours.py`  | eigene Häfen/Ankerplätze, Fotos, CSV/GPX                        |
+| `pois.py`, `weather.py`, `navgrid.py` | POIs (OSM), Wetter (Open-Meteo), Navigationsgitter |
+| `guide.py`     | Hafenführer `guide.html` + `harbours.gpx`                       |
 | `store.py`     | Offline-Speicher (SQLite + R-Tree)                             |
 | `route.py`     | GPX lesen, Korridor, Aufteilung in Kartenzellen                |
 | `coast.py`     | Landflächen aus OSM-Küstenlinien (Land links der Linie)        |

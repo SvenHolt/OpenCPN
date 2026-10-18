@@ -24,6 +24,7 @@
 
 #include "std_filesystem.h"
 
+#include "logbook_db.h"
 #include "passage_router.h"
 #include "seachart_db.h"
 
@@ -218,5 +219,49 @@ TEST(SeachartDb, HarboursPhotosWeather) {
   EXPECT_TRUE(db.LoadNavGrid(54, 10, 54.1, 10.1).Empty());
   ASSERT_TRUE(db.DeleteHarbour(all[0].id));
   EXPECT_TRUE(db.Harbours().empty());
+  fs::remove_all(dir);
+}
+
+TEST(LogbookDb, TripsAndEntries) {
+  fs::path dir = fs::temp_directory_path() / "logbook_db_test";
+  fs::remove_all(dir);
+  std::string seachart = (dir / "seachart.db").u8string();
+  std::string path = LogbookPathFor(seachart);
+  EXPECT_EQ(fs::u8path(path).filename().u8string(), "logbook.db");
+  LogbookDb db;
+  ASSERT_TRUE(db.Open(path));
+  Trip t;
+  t.name = "Kiel – Laboe";
+  t.from = "Kiel";
+  t.to = "Laboe";
+  t.started = kT0;
+  ASSERT_GT(db.AddTrip(t), 0);
+  EXPECT_EQ(db.ActiveTrip(), t.id);
+  LogEntry e;
+  e.time = kT0 + 60;
+  e.lat = 54.4;
+  e.lon = 10.2;
+  e.sog = 5.5;
+  e.event = "Abfahrt";
+  ASSERT_TRUE(db.AddEntry(t.id, e));
+  e.time += 900;
+  e.wind_kn = 12;
+  e.event.clear();
+  ASSERT_TRUE(db.AddEntry(t.id, e));
+  t.ended = kT0 + 3600;
+  t.notes = "Schöner Törn";
+  ASSERT_TRUE(db.UpdateTrip(t));
+  EXPECT_EQ(db.ActiveTrip(), 0);
+  Trip back;
+  ASSERT_TRUE(db.GetTrip(t.id, back));
+  EXPECT_EQ(back.notes, "Schöner Törn");
+  EXPECT_DOUBLE_EQ(back.Hours(), 1.0);
+  auto entries = db.Entries(t.id);
+  ASSERT_EQ(entries.size(), 2u);
+  EXPECT_EQ(entries[0].event, "Abfahrt");
+  EXPECT_LT(entries[0].wind_kn, 0);  // unknown
+  EXPECT_DOUBLE_EQ(entries[1].wind_kn, 12);
+  ASSERT_TRUE(db.DeleteTrip(t.id));
+  EXPECT_TRUE(db.Trips().empty());
   fs::remove_all(dir);
 }

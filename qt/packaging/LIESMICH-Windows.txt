@@ -28,6 +28,22 @@ Zum Ausprobieren
 * "Media": Spotify über die Spotify-Web-API (Client-ID nötig, siehe
   Anleitung auf der Seite). Die automatische Erkennung von Spotify-Desktop
   und YouTube Music (MPRIS) gibt es nur unter Linux.
+* "Passage" (Anker im Dock): Törnplanung von Hafen/Ankerplatz zu
+  Hafen/Ankerplatz mit Wetter (geladene GRIB-Datei oder die offline
+  gespeicherte Vorhersage), Dauer und Ankunftszeit je Etappe, "Beste
+  Abfahrt" über zwei Tage, "Törn starten" (Route, Track und Logbuch).
+  Reiter "Häfen": eigene Häfen und Ankerplätze mit Notizen und Fotos,
+  Geschäfte/Restaurants in der Nähe, Wetter. Reiter "Logbuch": alle Törns.
+  Rechtsklick auf die Karte: "Neuer Hafen oder Ankerplatz hier…".
 * Tastatur: +/- Zoom, F folgt dem Schiff, F11 Vollbild, Esc schließt Panels
+
+Seekarten, Häfen und Wetter offline (seachart)
+----------------------------------------------
+"Seekarten und Haefen (seachart).bat" öffnet ein Menü:
+  1. Revier herunterladen (OpenSeaMap, Tiefen, Häfen, POIs, Wetter)
+  3. Karten für eine Route erstellen (S-57, für "Karten" -> Kartenordner)
+  4. Wetter vor dem Ablegen aktualisieren
+Die Daten liegen in Dokumente\seachart\ (seachart.db, logbook.db, Fotos)
+und werden von OpenCPN Qt und OpenCPN gemeinsam genutzt.
 
 Hinweis: Vorschauversion, keine zugelassene Navigationssoftware.

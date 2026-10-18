@@ -79,6 +79,7 @@ set(OCPN_QT_CORE_SOURCES
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
   src/core/charts/ChartDatabase.cpp
+  src/core/Passage.cpp
 )
 
 # Core and UI are shared libraries so that plugins share the application's
@@ -90,8 +91,11 @@ set(OCPN_QT_PLUGIN_DIR ${CMAKE_INSTALL_LIBDIR}/opencpn-qt/plugins)
 
 add_library(ocpnqt_core ${OCPN_QT_LIB_TYPE} ${OCPN_QT_CORE_SOURCES})
 target_include_directories(ocpnqt_core PUBLIC src)
+# Passage planner, harbour database and logbook shared with the wx GUI and
+# tools/seachart.
+add_subdirectory(${OCPN_LIBS}/seachart seachart)
 target_link_libraries(ocpnqt_core PUBLIC Qt6::Core Qt6::Gui Qt6::Network
-  Qt6::Concurrent PRIVATE ocpnqt_s57reader)
+  Qt6::Concurrent ocpn::seachart PRIVATE ocpnqt_s57reader)
 if(Qt6SerialPort_FOUND)
   target_link_libraries(ocpnqt_core PUBLIC Qt6::SerialPort)
   target_compile_definitions(ocpnqt_core PUBLIC OCPN_QT_HAVE_SERIAL)
@@ -113,6 +117,7 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp
+  src/ui/PassagePage.cpp
   src/api/OcpnPlugin.h
 )
 target_link_libraries(ocpnqt_ui PUBLIC ocpnqt_core Qt6::Widgets Qt6::Svg
@@ -179,6 +184,11 @@ if(OCPN_QT_BUILD_TESTS)
       add_test(NAME ocpnqt_media_tests COMMAND ocpnqt_media_tests)
     endif()
     set_tests_properties(ocpnqt_media_tests PROPERTIES
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_executable(ocpnqt_passage_tests tests/test_passage.cpp)
+    target_link_libraries(ocpnqt_passage_tests PRIVATE ocpnqt_ui Qt6::Test)
+    add_test(NAME ocpnqt_passage_tests COMMAND ocpnqt_passage_tests)
+    set_tests_properties(ocpnqt_passage_tests PROPERTIES
       ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(ocpnqt_ui_tests tests/test_ui.cpp)
     target_link_libraries(ocpnqt_ui_tests PRIVATE ocpnqt_ui Qt6::Test)

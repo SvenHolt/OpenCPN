@@ -20,7 +20,7 @@
  *
  * Logbook: every passage started in the passage planner is stored with its
  * plan, the track, regular position/speed/weather entries and the user's
- * notes in logbook.db in the private data directory.
+ * notes in logbook.db next to seachart.db (shared with the Qt6 frontend).
  */
 
 #ifndef LOGBOOK_H_
@@ -36,8 +36,8 @@
 #include <wx/string.h>
 #include <wx/timer.h>
 
-namespace SQLite {
-class Database;
+namespace seachart {
+class LogbookDb;
 }
 class wxListCtrl;
 class wxTextCtrl;
@@ -90,7 +90,7 @@ public:
 private:
   Logbook();
   ~Logbook();
-  std::unique_ptr<SQLite::Database> m_db;
+  std::unique_ptr<seachart::LogbookDb> m_db;
   wxString m_path;
 };
 

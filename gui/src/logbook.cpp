@@ -23,8 +23,6 @@
 
 #include <cmath>
 
-#include <SQLiteCpp/SQLiteCpp.h>
-
 #include <wx/button.h>
 #include <wx/ffile.h>
 #include <wx/filedlg.h>
@@ -36,7 +34,6 @@
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
 
-#include "model/base_platform.h"
 #include "model/gui_vars.h"
 #include "model/own_ship.h"
 #include "model/route.h"
@@ -44,29 +41,13 @@
 #include "model/track.h"
 
 #include "logbook.h"
+#include "html_style.h"
+#include "logbook_db.h"
 #include "passage_planner_dlg.h"
 #include "seachart_db.h"
 #include "top_frame.h"
 
 namespace logbook {
-
-static const char *const kSchema = R"(
-CREATE TABLE IF NOT EXISTS trips (
-    id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '',
-    from_name TEXT NOT NULL DEFAULT '', to_name TEXT NOT NULL DEFAULT '',
-    from_lat REAL, from_lon REAL, to_lat REAL, to_lon REAL,
-    planned_departure INTEGER, planned_arrival INTEGER, planned_nm REAL,
-    plan TEXT NOT NULL DEFAULT '', weather TEXT NOT NULL DEFAULT '',
-    route_guid TEXT NOT NULL DEFAULT '', track_guid TEXT NOT NULL DEFAULT '',
-    started INTEGER, ended INTEGER, distance_nm REAL DEFAULT 0,
-    max_sog REAL DEFAULT 0, motor_nm REAL DEFAULT 0,
-    notes TEXT NOT NULL DEFAULT '');
-CREATE TABLE IF NOT EXISTS entries (
-    id INTEGER PRIMARY KEY, trip_id INTEGER NOT NULL, time INTEGER NOT NULL,
-    lat REAL, lon REAL, sog REAL, cog REAL, wind_kn REAL, wind_dir REAL,
-    event TEXT NOT NULL DEFAULT '');
-CREATE INDEX IF NOT EXISTS entries_trip ON entries (trip_id, time);
-)";
 
 static wxString U(const std::string &s) { return wxString::FromUTF8(s); }
 static std::string S(const wxString &s) { return s.ToStdString(wxConvUTF8); }
@@ -86,249 +67,139 @@ wxString FormatTime(time_t t) {
 }
 
 // ------------------------------------------------------------------ Logbook
+// The storage lives in libs/seachart (shared with the Qt6 frontend); this
+// adapter converts between its UTF-8 records and wxString.
 
 Logbook &Logbook::Get() {
   static Logbook instance;
   return instance;
 }
 
-Logbook::Logbook() = default;
+Logbook::Logbook() : m_db(std::make_unique<seachart::LogbookDb>()) {}
 Logbook::~Logbook() = default;
 
 bool Logbook::Open() {
-  if (m_db) return true;
-  wxFileName fn(g_BasePlatform->GetPrivateDataDir(), "logbook.db");
-  m_path = fn.GetFullPath();
-  try {
-    m_db = std::make_unique<SQLite::Database>(
-        S(m_path), SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE);
-    m_db->exec(kSchema);
-  } catch (std::exception &e) {
-    wxLogMessage("Logbook: cannot open %s: %s", m_path, e.what());
-    m_db.reset();
+  // logbook.db lies next to seachart.db, so all frontends share it
+  std::string path = seachart::LogbookPathFor(SeachartDatabase().Path());
+  if (m_db->IsOpen() && m_db->Path() == path) return true;
+  m_path = U(path);
+  std::string err;
+  if (!m_db->Open(path, &err)) {
+    wxLogMessage("Logbook: cannot open %s: %s", m_path, U(err));
     return false;
   }
   return true;
 }
 
-static void BindTrip(SQLite::Statement &q, const Trip &t) {
-  q.bind(1, S(t.name));
-  q.bind(2, S(t.from));
-  q.bind(3, S(t.to));
-  q.bind(4, t.from_lat);
-  q.bind(5, t.from_lon);
-  q.bind(6, t.to_lat);
-  q.bind(7, t.to_lon);
-  q.bind(8, (int64_t)t.planned_departure);
-  q.bind(9, (int64_t)t.planned_arrival);
-  q.bind(10, t.planned_nm);
-  q.bind(11, S(t.plan));
-  q.bind(12, S(t.weather));
-  q.bind(13, S(t.route_guid));
-  q.bind(14, S(t.track_guid));
-  q.bind(15, (int64_t)t.started);
-  if (t.ended)
-    q.bind(16, (int64_t)t.ended);
-  else
-    q.bind(16);
-  q.bind(17, t.distance_nm);
-  q.bind(18, t.max_sog);
-  q.bind(19, t.motor_nm);
-  q.bind(20, S(t.notes));
+static seachart::Trip ToDb(const Trip &t) {
+  seachart::Trip d;
+  d.id = t.id;
+  d.name = S(t.name);
+  d.from = S(t.from);
+  d.to = S(t.to);
+  d.from_lat = t.from_lat;
+  d.from_lon = t.from_lon;
+  d.to_lat = t.to_lat;
+  d.to_lon = t.to_lon;
+  d.planned_departure = t.planned_departure;
+  d.planned_arrival = t.planned_arrival;
+  d.planned_nm = t.planned_nm;
+  d.plan = S(t.plan);
+  d.weather = S(t.weather);
+  d.route_guid = S(t.route_guid);
+  d.track_guid = S(t.track_guid);
+  d.started = t.started;
+  d.ended = t.ended;
+  d.distance_nm = t.distance_nm;
+  d.max_sog = t.max_sog;
+  d.motor_nm = t.motor_nm;
+  d.notes = S(t.notes);
+  return d;
+}
+
+static Trip FromDb(const seachart::Trip &d) {
+  Trip t;
+  t.id = d.id;
+  t.name = U(d.name);
+  t.from = U(d.from);
+  t.to = U(d.to);
+  t.from_lat = d.from_lat;
+  t.from_lon = d.from_lon;
+  t.to_lat = d.to_lat;
+  t.to_lon = d.to_lon;
+  t.planned_departure = d.planned_departure;
+  t.planned_arrival = d.planned_arrival;
+  t.planned_nm = d.planned_nm;
+  t.plan = U(d.plan);
+  t.weather = U(d.weather);
+  t.route_guid = U(d.route_guid);
+  t.track_guid = U(d.track_guid);
+  t.started = d.started;
+  t.ended = d.ended;
+  t.distance_nm = d.distance_nm;
+  t.max_sog = d.max_sog;
+  t.motor_nm = d.motor_nm;
+  t.notes = U(d.notes);
+  return t;
 }
 
 int64_t Logbook::AddTrip(Trip &trip) {
   if (!Open()) return 0;
-  try {
-    SQLite::Statement q(
-        *m_db,
-        "INSERT INTO trips (name, from_name, to_name, from_lat, from_lon,"
-        " to_lat, to_lon, planned_departure, planned_arrival, planned_nm,"
-        " plan, weather, route_guid, track_guid, started, ended, distance_nm,"
-        " max_sog, motor_nm, notes) VALUES"
-        " (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-    BindTrip(q, trip);
-    q.exec();
-    trip.id = m_db->getLastInsertRowid();
-  } catch (std::exception &e) {
-    wxLogMessage("Logbook: %s", e.what());
-    return 0;
-  }
+  seachart::Trip d = ToDb(trip);
+  trip.id = m_db->AddTrip(d);
   return trip.id;
 }
 
 bool Logbook::UpdateTrip(const Trip &trip) {
-  if (!Open()) return false;
-  try {
-    SQLite::Statement q(
-        *m_db,
-        "UPDATE trips SET name=?, from_name=?, to_name=?, from_lat=?,"
-        " from_lon=?, to_lat=?, to_lon=?, planned_departure=?,"
-        " planned_arrival=?, planned_nm=?, plan=?, weather=?, route_guid=?,"
-        " track_guid=?, started=?, ended=?, distance_nm=?, max_sog=?,"
-        " motor_nm=?, notes=? WHERE id=?");
-    BindTrip(q, trip);
-    q.bind(21, (int64_t)trip.id);
-    q.exec();
-  } catch (std::exception &e) {
-    wxLogMessage("Logbook: %s", e.what());
-    return false;
-  }
-  return true;
+  return Open() && m_db->UpdateTrip(ToDb(trip));
 }
 
-bool Logbook::DeleteTrip(int64_t id) {
-  if (!Open()) return false;
-  try {
-    SQLite::Statement e(*m_db, "DELETE FROM entries WHERE trip_id=?");
-    e.bind(1, (int64_t)id);
-    e.exec();
-    SQLite::Statement t(*m_db, "DELETE FROM trips WHERE id=?");
-    t.bind(1, (int64_t)id);
-    t.exec();
-  } catch (std::exception &e) {
-    wxLogMessage("Logbook: %s", e.what());
-    return false;
-  }
-  return true;
-}
-
-static const char *const kTripCols =
-    "id, name, from_name, to_name, from_lat, from_lon, to_lat, to_lon,"
-    " planned_departure, planned_arrival, planned_nm, plan, weather,"
-    " route_guid, track_guid, started, ended, distance_nm, max_sog,"
-    " motor_nm, notes";
-
-static Trip ReadTrip(SQLite::Statement &q) {
-  Trip t;
-  auto txt = [&q](int i) {
-    return q.getColumn(i).isNull() ? wxString() : U(q.getColumn(i).getString());
-  };
-  auto num = [&q](int i) {
-    return q.getColumn(i).isNull() ? 0.0 : q.getColumn(i).getDouble();
-  };
-  auto tim = [&q](int i) {
-    return q.getColumn(i).isNull() ? (time_t)0
-                                   : (time_t)q.getColumn(i).getInt64();
-  };
-  t.id = q.getColumn(0).getInt64();
-  t.name = txt(1);
-  t.from = txt(2);
-  t.to = txt(3);
-  t.from_lat = num(4);
-  t.from_lon = num(5);
-  t.to_lat = num(6);
-  t.to_lon = num(7);
-  t.planned_departure = tim(8);
-  t.planned_arrival = tim(9);
-  t.planned_nm = num(10);
-  t.plan = txt(11);
-  t.weather = txt(12);
-  t.route_guid = txt(13);
-  t.track_guid = txt(14);
-  t.started = tim(15);
-  t.ended = tim(16);
-  t.distance_nm = num(17);
-  t.max_sog = num(18);
-  t.motor_nm = num(19);
-  t.notes = txt(20);
-  return t;
-}
+bool Logbook::DeleteTrip(int64_t id) { return Open() && m_db->DeleteTrip(id); }
 
 std::vector<Trip> Logbook::Trips() {
   std::vector<Trip> out;
   if (!Open()) return out;
-  try {
-    SQLite::Statement q(*m_db, std::string("SELECT ") + kTripCols +
-                                   " FROM trips ORDER BY started DESC");
-    while (q.executeStep()) out.push_back(ReadTrip(q));
-  } catch (std::exception &e) {
-    wxLogMessage("Logbook: %s", e.what());
-  }
+  for (const auto &d : m_db->Trips()) out.push_back(FromDb(d));
   return out;
 }
 
 bool Logbook::GetTrip(int64_t id, Trip &trip) {
-  if (!Open()) return false;
-  try {
-    SQLite::Statement q(
-        *m_db, std::string("SELECT ") + kTripCols + " FROM trips WHERE id=?");
-    q.bind(1, (int64_t)id);
-    if (q.executeStep()) {
-      trip = ReadTrip(q);
-      return true;
-    }
-  } catch (std::exception &e) {
-    wxLogMessage("Logbook: %s", e.what());
-  }
-  return false;
+  seachart::Trip d;
+  if (!Open() || !m_db->GetTrip(id, d)) return false;
+  trip = FromDb(d);
+  return true;
 }
 
-int64_t Logbook::ActiveTrip() {
-  if (!Open()) return 0;
-  try {
-    SQLite::Statement q(*m_db,
-                        "SELECT id FROM trips WHERE ended IS NULL ORDER BY"
-                        " started DESC LIMIT 1");
-    if (q.executeStep()) return q.getColumn(0).getInt64();
-  } catch (std::exception &e) {
-    wxLogMessage("Logbook: %s", e.what());
-  }
-  return 0;
-}
+int64_t Logbook::ActiveTrip() { return Open() ? m_db->ActiveTrip() : 0; }
 
 bool Logbook::AddEntry(int64_t trip, const Entry &e) {
   if (!Open()) return false;
-  try {
-    SQLite::Statement q(*m_db,
-                        "INSERT INTO entries (trip_id, time, lat, lon, sog,"
-                        " cog, wind_kn, wind_dir, event) VALUES"
-                        " (?,?,?,?,?,?,?,?,?)");
-    q.bind(1, (int64_t)trip);
-    q.bind(2, (int64_t)e.time);
-    q.bind(3, e.lat);
-    q.bind(4, e.lon);
-    q.bind(5, e.sog);
-    q.bind(6, e.cog);
-    if (e.wind_kn >= 0) {
-      q.bind(7, e.wind_kn);
-      q.bind(8, e.wind_dir);
-    } else {
-      q.bind(7);
-      q.bind(8);
-    }
-    q.bind(9, S(e.event));
-    q.exec();
-  } catch (std::exception &ex) {
-    wxLogMessage("Logbook: %s", ex.what());
-    return false;
-  }
-  return true;
+  seachart::LogEntry d;
+  d.time = e.time;
+  d.lat = e.lat;
+  d.lon = e.lon;
+  d.sog = e.sog;
+  d.cog = e.cog;
+  d.wind_kn = e.wind_kn;
+  d.wind_dir = e.wind_dir;
+  d.event = S(e.event);
+  return m_db->AddEntry(trip, d);
 }
 
 std::vector<Entry> Logbook::Entries(int64_t trip) {
   std::vector<Entry> out;
   if (!Open()) return out;
-  try {
-    SQLite::Statement q(*m_db,
-                        "SELECT time, lat, lon, sog, cog, wind_kn, wind_dir,"
-                        " event FROM entries WHERE trip_id=? ORDER BY time,"
-                        " id");
-    q.bind(1, (int64_t)trip);
-    while (q.executeStep()) {
-      Entry e;
-      e.time = (time_t)q.getColumn(0).getInt64();
-      e.lat = q.getColumn(1).getDouble();
-      e.lon = q.getColumn(2).getDouble();
-      e.sog = q.getColumn(3).getDouble();
-      e.cog = q.getColumn(4).getDouble();
-      e.wind_kn = q.getColumn(5).isNull() ? -1 : q.getColumn(5).getDouble();
-      e.wind_dir = q.getColumn(6).getDouble();
-      e.event = U(q.getColumn(7).getString());
-      out.push_back(e);
-    }
-  } catch (std::exception &ex) {
-    wxLogMessage("Logbook: %s", ex.what());
+  for (const auto &d : m_db->Entries(trip)) {
+    Entry e;
+    e.time = d.time;
+    e.lat = d.lat;
+    e.lon = d.lon;
+    e.sog = d.sog;
+    e.cog = d.cog;
+    e.wind_kn = d.wind_kn;
+    e.wind_dir = d.wind_dir;
+    e.event = U(d.event);
+    out.push_back(e);
   }
   return out;
 }
@@ -636,17 +507,17 @@ void LogbookDlg::OnExport(wxCommandEvent &) {
             e.wind_kn >= 0 ? wxString::Format("%.0f", e.wind_dir) : "", ev);
       }
   } else {
+    // same look as the Qt6 frontend and the seachart harbour guide
     out << "<!doctype html><html><meta charset=utf-8><title>" << _("Logbook")
-        << "</title><style>body{font-family:sans-serif;"
-        << "max-width:900px;margin:auto}pre{background:#f4f4f4;padding:8px;"
-        << "overflow:auto}</style><h1>" << _("Logbook") << "</h1>";
+        << "</title><style>" << seachart::kHtmlStyle << "</style><header><h1>"
+        << _("Logbook") << "</h1></header><main>";
     for (const auto &t : m_trips) {
-      out << "<h2>" << Html(t.from + " - " + t.to) << "</h2>";
+      out << "<section><h2>" << Html(t.from + " - " + t.to) << "</h2>";
       if (!t.notes.IsEmpty()) out << "<p>" << Html(t.notes) << "</p>";
       out << "<pre>" << Html(TripText(t, Logbook::Get().Entries(t.id)))
-          << "</pre>";
+          << "</pre></section>";
     }
-    out << "</html>";
+    out << "</main></html>";
   }
   wxFFile f(dlg.GetPath(), "w");
   if (!f.IsOpened() || !f.Write(out, wxConvUTF8))
