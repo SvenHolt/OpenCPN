@@ -256,6 +256,8 @@ if(OCPN_QT_BUILD_TESTS)
     target_compile_definitions(ocpnqt_i18n_tests PRIVATE
       OCPN_QT_I18N_DIR="${CMAKE_CURRENT_SOURCE_DIR}/i18n")
     add_test(NAME ocpnqt_i18n_tests COMMAND ocpnqt_i18n_tests)
+    set_tests_properties(ocpnqt_i18n_tests PROPERTIES
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     # Every text of the user interface has a German translation.
     find_package(Python3 COMPONENTS Interpreter)
     if(Python3_Interpreter_FOUND)
