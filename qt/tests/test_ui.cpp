@@ -1,5 +1,7 @@
 // Smoke tests for the opencpn-qt user interface (run offscreen).
 #include <QPushButton>
+#include <QScrollArea>
+#include <QSpinBox>
 #include <QtTest>
 
 #include "core/AppSettings.h"
@@ -171,12 +173,60 @@ private slots:
     plan->click();
     QVERIFY(QTest::qWaitFor([save, panel] { return save->isVisibleTo(panel); },
                             20000));
+    // Wind from ahead: the sail plan beats with tacks.
+    auto* passage = panel->findChild<PassagePanel*>();
+    QSpinBox* windDir = nullptr;
+    for (auto* sb : passage->findChildren<QSpinBox*>())
+      if (sb->suffix() == QStringLiteral("°")) windDir = sb;
+    QVERIFY(windDir);
+    const int oldDir = windDir->value();
+    windDir->setValue(30);
+    QVERIFY(QTest::qWaitFor(
+        [passage] { return passage->sailingPlan().tacks > 0; }, 3000));
+    const SailingPlan& sp = passage->sailingPlan();
+    QVERIFY(!sp.boards.isEmpty());
+    QVERIFY(!sp.boards.first().advice.summary().isEmpty());
+    QTest::qWait(50);
+    // Board rows: a tap shows the trim.
+    ListRow* boardRow = nullptr;
+    for (auto* r : passage->findChildren<ListRow*>("sailBoard"))
+      if (!r->isHidden() && !boardRow) boardRow = r;
+    QVERIFY(boardRow);
+    auto* trim = boardRow->findChild<QLabel*>("trim");
+    QVERIFY(trim && trim->isHidden());
+    QTest::mouseClick(boardRow, Qt::LeftButton, {}, QPoint(20, 20));
+    QVERIFY(!trim->isHidden());
+    QVERIFY(trim->text().contains("Boom"));
+    QVERIFY(!passage->findChildren<QLabel*>("sailTurn").isEmpty());
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_SAILPLAN_SHOT");
+        !shot.isEmpty()) {
+      m_win->drawer()->open(m_win->pageIndex("routes"));
+      QTest::qWait(400);
+      for (QWidget* w = boardRow->parentWidget(); w; w = w->parentWidget())
+        if (auto* sa = qobject_cast<QScrollArea*>(w)) {
+          sa->ensureWidgetVisible(boardRow, 0, 160);
+          break;
+        }
+      QTest::qWait(200);
+      m_win->grab().save(shot);
+    }
+    const int tacks = sp.tacks;
     save->click();
+    windDir->setValue(oldDir);
     QCOMPARE(int(NavStore::instance().routes().size()), before + 1);
     const Route& r = NavStore::instance().routes().last();
     QCOMPARE(r.name, QStringLiteral("Kiel → Laboe"));
     QCOMPARE(r.points.first().name, QStringLiteral("Kiel"));
     QCOMPARE(r.points.last().name, QStringLiteral("Laboe"));
+    // Tacks as waypoints, with time and sails.
+    int tackPoints = 0;
+    for (const Waypoint& w : r.points)
+      if (w.name.startsWith("T") && w.name.size() <= 3) {
+        ++tackPoints;
+        QVERIFY(w.time.isValid());
+        QVERIFY(w.description.contains("Tack"));
+      }
+    QCOMPARE(tackPoints, tacks);
     QCOMPARE(NavStore::instance().activeRouteId(), r.id);
     NavStore::instance().stopNavigation();
   }

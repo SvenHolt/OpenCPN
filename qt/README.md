@@ -32,6 +32,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
 | **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
+| **Segelplan: Schläge, Wenden, Segel und Trimm** | |
+| ![Segelplan](doc/screenshot-sailplan.png) | |
 | **Bordsysteme · Nachtfahrt** | **Automation „Winter-Duschen“** |
 | ![Boot](doc/screenshot-boat.png) | ![Automation](doc/screenshot-automation.png) |
 | **Etappen: Weg auf der Karte, Diagramme** | **Logbuch: Tagesbericht** |
@@ -69,6 +71,7 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Routenplanung von Hafen zu Hafen** (automatisch über Wasser, Land und Molen werden umfahren) | ✅ |
 | **Törnplanung**: Zeitfenster, Segel-/Motoranteil, Wenden/Halsen, Dauer, Ankunft, Diesel, Tageslicht (GRIB-Wind) | ✅ |
 | **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
+| **Segelplan**: Schläge mit Wendepositionen in einer Gasse um die Route (landfrei), Segelführung und Trimm je Schlag, Segelwechsel, Wenden als Wegpunkte | ✅ |
 | **Polardaten**: Import (.pol/.csv/Expedition), Tabelleneditor, Diagramm, optimale Kreuz-/Vorwindwinkel | ✅ |
 | **Wettermodelle vergleichen** (ICON, GFS, ECMWF, Météo-France, GRIB, manuell) × Abfahrtszeiten | ✅ |
 | **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Warmwasser, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
@@ -469,9 +472,39 @@ Nach der Berechnung zeigt der Bereich **Törn**:
 
 So wird gerechnet: Die Bootsgeschwindigkeit stammt aus der Polare des
 Bootes (siehe oben). Gekreuzt bzw. gehalst wird mit den Winkeln des besten
-VMG. Pro Schlaglänge von
-etwa 1,5 sm wird eine Wende gezählt. Der Wind wird alle 2 sm neu bestimmt.
-Beim Speichern erhalten die Wegpunkte ETA bzw. ETD und Fahrmodus.
+VMG. Der Wind wird alle 2 sm neu bestimmt. Beim Speichern erhalten die
+Wegpunkte ETA bzw. ETD und Fahrmodus.
+
+#### Segelplan: Segelführung, Trimm und Wenden
+
+Unter den Etappen steht der **Segelplan** für die gewählte Abfahrt und
+Windquelle:
+
+* **Schläge:** Was nicht direkt anliegt, wird gekreuzt (bzw. vor dem Wind
+  gehalst) – auf den Kursen des besten VMG, innerhalb einer **Gasse** um
+  die Kurslinie (einstellbar, Vorgabe ± 1 sm) und, mit der Basiskarte, mit
+  Abstand zum Land. Ändert sich der Wind unterwegs, ändern sich die
+  Schläge mit (Dreher werden ausgesegelt). Wird es zum Kreuzen zu eng,
+  schlägt der Plan Motorfahrt vor und warnt.
+* **Wenden und Halsen** mit Uhrzeit, Position und neuem Kurs; auf der
+  Karte als orange Rauten, die Schläge als dünne Linie. „Tacks and gybes
+  as waypoints“ übernimmt sie beim Speichern als Wegpunkte (T1, T2 …,
+  G1 …) mit Zeit und Segelführung in die Route.
+* **Segelführung je Schlag** aus dem scheinbaren Wind und dem
+  Segelinventar: Reffs im Groß, Genua in 10-%-Stufen eingerollt, Fock oder
+  Sturmfock, Gennaker, Spinnaker oder Code 0. **Segelwechsel** stehen mit
+  Zeit und Ort im Plan (grüne Quadrate auf der Karte).
+* **Trimm** (Tipp auf einen Schlag): Kurs zum Wind, Baumwinkel, Großschot,
+  Traveller, Baumniederholer, Unterliek, Achterstag, Cunningham,
+  Vorsegelschot und Holepunkt, dazu Bullenstander, Schmetterling mit
+  ausgebaumter Genua, Spinnakerbaum bzw. Gennaker-Hals.
+* „Set first sails“ übernimmt die Segel des ersten
+  Schlags in die Segelkonfiguration (Cockpit).
+
+Das **Segelinventar** steht unter Einstellungen → Segel & Polare: welche
+Segel an Bord sind (Genua, Fock, Sturmfock, Gennaker, Spinnaker, Code 0)
+und ab welchem scheinbaren Wind gerefft (1./2./3. Reff) bzw. die Genua
+eingerollt wird, dazu die Windgrenze für Gennaker und Spinnaker.
 
 Tiefen, Fahrwasser, Sperrgebiete und Brücken werden dabei **nicht**
 berücksichtigt. Die Route ist ein Vorschlag und muss vor der Fahrt auf der
@@ -681,6 +714,7 @@ qt/
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
 │   ├── RoutePlanner       Routing über Wasser (Raster, A*, Begradigung)
 │   ├── PassagePlanner     Törnplanung (Polare, Kreuzen, Zeitfenster, Sonne)
+│   ├── SailPlan           Segelplan: Schläge, Wenden, Segelführung, Trimm
 │   ├── Polar              Polardaten (Formate, Interpolation, VMG)
 │   ├── WeatherModels      Modellvorhersagen entlang der Route (Open-Meteo)
 │   ├── Voyage             gespeicherte Reisen und Offline-Vorbereitung

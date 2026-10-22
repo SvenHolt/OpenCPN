@@ -77,6 +77,7 @@ set(OCPN_QT_CORE_SOURCES
   src/core/GribDownload.cpp
   src/core/RoutePlanner.cpp
   src/core/PassagePlanner.cpp
+  src/core/SailPlan.cpp
   src/core/Polar.cpp
   src/core/WeatherModels.cpp
   src/core/Voyage.cpp
@@ -246,6 +247,9 @@ if(OCPN_QT_BUILD_TESTS)
     add_executable(ocpnqt_planning_tests tests/test_planning.cpp)
     target_link_libraries(ocpnqt_planning_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_planning_tests COMMAND ocpnqt_planning_tests)
+    add_executable(ocpnqt_sailplan_tests tests/test_sailplan.cpp)
+    target_link_libraries(ocpnqt_sailplan_tests PRIVATE ocpnqt_core Qt6::Test)
+    add_test(NAME ocpnqt_sailplan_tests COMMAND ocpnqt_sailplan_tests)
     add_executable(ocpnqt_legs_tests tests/test_legs.cpp)
     target_link_libraries(ocpnqt_legs_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_legs_tests COMMAND ocpnqt_legs_tests)

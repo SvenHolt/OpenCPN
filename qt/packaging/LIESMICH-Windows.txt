@@ -38,6 +38,11 @@ Zum Ausprobieren
   (ICON, GFS, ECMWF, Météo-France) über die Abfahrtszeiten. "Reise für
   offline speichern" sichert Route, Vorhersagen und Häfen entlang der
   Strecke für unterwegs ohne Internet.
+* Unter der Törnplanung steht der Segelplan: Schläge mit Wendepositionen
+  (in einer Gasse um die Route, nicht über Land), Segelführung (Reffs,
+  Genua-Rollung, Gennaker/Spinnaker) und Trimm je Schlag (Tipp auf einen
+  Schlag), Segelwechsel; Wenden können als Wegpunkte gespeichert werden.
+  Das Segelinventar steht unter Einstellungen -> "Segel & Polare".
 * Einstellungen -> "Segel & Polare": Polardatei importieren (.pol/.csv/Expedition) oder
   in der Tabelle bearbeiten. Mit Internet werden Häfen beim Verschieben
   der Karte und bei der Suche automatisch online nachgeladen.

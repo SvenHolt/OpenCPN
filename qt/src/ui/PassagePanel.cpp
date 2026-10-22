@@ -18,11 +18,13 @@
 #include <cmath>
 
 #include "core/AppSettings.h"
+#include "core/GeoMath.h"
 #include "core/BoatConfig.h"
 #include "core/Grib.h"
 #include "core/NavStore.h"
 #include "core/Polar.h"
 #include "core/osm/OnlineOsm.h"
+#include "ui/DrawerPages.h"
 #include "ui/Icons.h"
 #include "ui/Theme.h"
 
@@ -315,6 +317,19 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
   m_polarInfo->setWordWrap(true);
   speeds->addWidget(m_polarInfo, 0, 2);
   speeds->setColumnStretch(2, 1);
+  speeds->addWidget(label(tr("Lane"), "dim"), 1, 0);
+  m_lane = new QDoubleSpinBox;
+  m_lane->setRange(0.2, 10);
+  m_lane->setDecimals(1);
+  m_lane->setSingleStep(0.1);
+  m_lane->setPrefix(QStringLiteral("± "));
+  m_lane->setSuffix(tr(" NM"));
+  m_lane->setValue(set.value("laneNm", 1.0).toDouble());
+  m_lane->setToolTip(
+      tr("How far the boards may lead off the rhumb line "
+         "when tacking or gybing"));
+  speeds->addWidget(m_lane, 1, 1);
+  speeds->addWidget(label(tr("tacking lane around the route"), "dim"), 1, 2);
   l->addLayout(speeds);
 
   // Wind
@@ -388,6 +403,32 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
   m_legs = new QVBoxLayout;
   m_legs->setSpacing(4);
   rl->addLayout(m_legs);
+
+  // Sail plan: boards with sails and trim, tacks, gybes, sail changes.
+  auto* sailHead = new QHBoxLayout;
+  sailHead->addWidget(label(tr("SAIL PLAN"), "section"), 1);
+  m_applySails = new QPushButton(tr("Set first sails"));
+  m_applySails->setProperty("role", "ghost");
+  m_applySails->setCursor(Qt::PointingHandCursor);
+  m_applySails->setToolTip(
+      tr("Takes the sails of the first board into the sail configuration"));
+  connect(m_applySails, &QPushButton::clicked, this, [this] {
+    for (const SailBoard& b : m_sail.boards)
+      if (!b.motor) {
+        SailConfig c = b.advice.sails;
+        c.propulsion = BoatConfig::instance().sails().propulsion;
+        BoatConfig::instance().setSails(c);
+        return;
+      }
+  });
+  sailHead->addWidget(m_applySails);
+  rl->addLayout(sailHead);
+  m_sailSummary = label(QString(), "dim");
+  m_sailSummary->setWordWrap(true);
+  rl->addWidget(m_sailSummary);
+  m_sailList = new QVBoxLayout;
+  m_sailList->setSpacing(4);
+  rl->addLayout(m_sailList);
   l->addWidget(m_results);
 
   m_debounce.setSingleShot(true);
@@ -405,6 +446,7 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
   for (auto* s : {m_motorSpeed, m_windKn})
     connect(s, &QDoubleSpinBox::valueChanged, this, changed);
   connect(m_windDir, &QSpinBox::valueChanged, this, changed);
+  connect(m_lane, &QDoubleSpinBox::valueChanged, this, changed);
   connect(m_timeline, &DepartureTimeline::departureChosen, this,
           [this](const QDateTime& d) {
             m_chosen = d;
@@ -413,6 +455,117 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
   connect(&GribManager::instance(), &GribManager::fileChanged, this, changed);
   connect(&BoatConfig::instance(), &BoatConfig::changed, this, changed);
   hide();
+}
+
+double PassagePanel::laneNm() const { return m_lane->value(); }
+
+void PassagePanel::showSailPlan() {
+  const Palette& pal = Theme::p();
+  const auto& cfg = AppSettings::instance();
+  const SailingPlan& sp = m_sail;
+  while (QLayoutItem* it = m_sailList->takeAt(0)) {
+    if (QWidget* w = it->widget()) {
+      w->hide();
+      w->deleteLater();
+    }
+    delete it;
+  }
+  QStringList sum;
+  sum << tr("%n board(s)", nullptr, int(sp.boards.size()));
+  if (sp.tacks) sum << tr("%n tack(s)", nullptr, sp.tacks);
+  if (sp.gybes) sum << tr("%n gybe(s)", nullptr, sp.gybes);
+  if (sp.sailChanges) sum << tr("%n sail change(s)", nullptr, sp.sailChanges);
+  sum << cfg.distanceText(sp.sailedNm) + " · " + hoursText(sp.hours);
+  QString text = sum.join(" · ");
+  if (!sp.warnings.isEmpty()) text += "\n⚠ " + sp.warnings.join("\n⚠ ");
+  m_sailSummary->setText(text);
+  m_applySails->setEnabled(
+      std::any_of(sp.boards.begin(), sp.boards.end(),
+                  [](const SailBoard& b) { return !b.motor; }));
+
+  // Boards in order, with the tacks/gybes and sail changes before them.
+  constexpr int kMaxRows = 60;
+  int rows = 0, ev = 0;
+  const auto eventRow = [&](const SailEvent& e) {
+    const bool turn =
+        e.kind == SailEvent::Kind::Tack || e.kind == SailEvent::Kind::Gybe;
+    const QColor c = turn                                    ? pal.warning
+                     : e.kind == SailEvent::Kind::SailChange ? pal.accentBright
+                                                             : pal.textDim;
+    auto* l = new QLabel(
+        QStringLiteral("<span style='color:%1'>%2 <b>%3</b> %4</span>"
+                       "<span style='color:%5'> · %6 %7%8</span>")
+            .arg(
+                c.name(), turn ? QStringLiteral("↻") : QStringLiteral("⛵"),
+                SailEvent::kindName(e.kind),
+                e.time.toLocalTime().toString("HH:mm"), pal.textDim.name(),
+                geo::formatLat(e.pos.y()), geo::formatLon(e.pos.x()),
+                e.text.isEmpty() ? QString() : " · " + e.text.toHtmlEscaped()));
+    l->setObjectName(turn ? "sailTurn" : "sailEvent");
+    l->setTextFormat(Qt::RichText);
+    l->setWordWrap(true);
+    m_sailList->addWidget(l);
+  };
+  for (const SailBoard& b : sp.boards) {
+    // Events up to the start of this board.
+    while (ev < sp.events.size() && sp.events[ev].time <= b.start) {
+      const SailEvent& e = sp.events[ev++];
+      if (e.kind == SailEvent::Kind::Tack || e.kind == SailEvent::Kind::Gybe ||
+          e.kind == SailEvent::Kind::SailChange)
+        eventRow(e);
+    }
+    if (++rows > kMaxRows) {
+      m_sailList->addWidget(label(
+          tr("… %n more board(s)", nullptr, int(sp.boards.size()) - kMaxRows),
+          "dim"));
+      break;
+    }
+    auto* row = new ListRow;
+    row->setObjectName("sailBoard");
+    row->setMinimumHeight(50);
+    if (!b.motor) row->setHighlight(b.twa > 0 ? pal.success : pal.danger);
+    auto* rl = new QVBoxLayout(row);
+    rl->setContentsMargins(10, 6, 10, 6);
+    rl->setSpacing(2);
+    const QString tack =
+        b.motor ? tr("engine")
+                : (b.twa > 0 ? tr("starboard tack") : tr("port tack"));
+    auto* head = new QLabel(
+        QStringLiteral("<b>%1</b> &nbsp;%2° · %3 · %4 · %5 kn<br>"
+                       "<span style='color:%6'>%7 · TWA %8° · %9 kn true · "
+                       "%10</span>")
+            .arg(b.start.toLocalTime().toString("HH:mm"))
+            .arg(int(std::round(b.headingDeg)) % 360, 3, 10, QChar('0'))
+            .arg(tack, cfg.distanceText(b.distanceNm))
+            .arg(b.speedKn, 0, 'f', 1)
+            .arg(pal.textDim.name(),
+                 b.motor ? tr("Under engine") : b.advice.trim.pointOfSail)
+            .arg(int(std::round(std::abs(b.twa))))
+            .arg(int(std::round(b.tws)))
+            .arg(b.motor ? QString() : b.advice.summary().toHtmlEscaped()));
+    head->setTextFormat(Qt::RichText);
+    head->setWordWrap(true);
+    head->setAttribute(Qt::WA_TransparentForMouseEvents);
+    rl->addWidget(head);
+    auto* trim = label(QString(), "dim");
+    trim->setObjectName("trim");
+    trim->setWordWrap(true);
+    trim->setAttribute(Qt::WA_TransparentForMouseEvents);
+    if (!b.motor) {
+      QStringList lines;
+      lines << tr("Boom about %1° off the centreline")
+                   .arg(int(std::round(b.advice.trim.boomDeg)));
+      lines += b.advice.trim.lines();
+      if (!b.advice.note.isEmpty()) lines.prepend(b.advice.note);
+      trim->setText("• " + lines.join("\n• "));
+    }
+    trim->hide();
+    rl->addWidget(trim);
+    if (!b.motor)
+      connect(row, &ListRow::clicked, trim,
+              [trim] { trim->setVisible(trim->isHidden()); });
+    m_sailList->addWidget(row);
+  }
 }
 
 PassageSettings PassagePanel::settings() const {
@@ -443,6 +596,7 @@ void PassagePanel::saveSettings() const {
   set.setValue("optimize", m_optimize->currentIndex());
   set.setValue("strategy", m_strategy->checkedId());
   set.setValue("motorSpeed", m_motorSpeed->value());
+  set.setValue("laneNm", m_lane->value());
   set.setValue("windFrom", m_windDir->value());
   set.setValue("windKn", m_windKn->value());
 }
@@ -553,7 +707,31 @@ void PassagePanel::recalculate() {
           ? tr("Constant wind as entered below.")
           : tr("Wind from %1; the values below are used outside of it.")
                 .arg(sourceName(m_sourceId)));
+  // Boards, tacks and sails for the shown departure and wind source.
+  PassageSettings one = s;
+  one.departure = m_plan.departure;
+  one.latestDeparture = {};
+  m_sail = SailPlanner::plan(m_route, one, windFor(m_sourceId),
+                             SailInventory::load(), laneNm(), m_water);
+  // The tacks and gybes of the sail plan are the ones to count.
+  m_plan.tacks = m_plan.gybes = 0;
+  for (PassageLeg& leg : m_plan.legs) leg.tacks = leg.gybes = 0;
+  for (int i = 1; i < m_sail.boards.size(); ++i) {
+    const SailBoard& a = m_sail.boards[i - 1];
+    const SailBoard& b = m_sail.boards[i];
+    if (a.leg != b.leg || a.motor || b.motor || a.mode != b.mode ||
+        (a.twa > 0) == (b.twa > 0) || b.leg >= m_plan.legs.size())
+      continue;
+    if (b.mode == PassageLeg::Mode::Beat) {
+      ++m_plan.legs[b.leg].tacks;
+      ++m_plan.tacks;
+    } else if (b.mode == PassageLeg::Mode::Run) {
+      ++m_plan.legs[b.leg].gybes;
+      ++m_plan.gybes;
+    }
+  }
   showResults(selectedOptions);
+  showSailPlan();
   // The matrix shows the departures of all sources; the bar timeline is
   // only needed without models.
   m_timeline->setVisible(rows.size() == 1 && selectedOptions.size() > 1);
