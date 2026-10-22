@@ -10,6 +10,13 @@ SideDrawer::SideDrawer(QWidget* parent)
   l->setContentsMargins(kShadow + 22, kShadow + 18, kShadow + 14, kShadow + 18);
   l->setSpacing(12);
   auto* header = new QHBoxLayout;
+  m_back = new IconButton("back", tr("Back"), this);
+  m_back->hide();
+  connect(m_back, &QAbstractButton::clicked, this, [this] {
+    const int parent = parentOf(m_stack->currentIndex());
+    if (parent >= 0) open(parent);
+  });
+  header->addWidget(m_back);
   m_title = new QLabel(this);
   m_title->setProperty("role", "title");
   header->addWidget(m_title, 1);
@@ -28,12 +35,20 @@ SideDrawer::SideDrawer(QWidget* parent)
   hide();
 }
 
-int SideDrawer::addPage(const QString& title, QWidget* page) {
+int SideDrawer::addPage(const QString& title, QWidget* page, int parent) {
   m_titles << title;
+  m_parents << parent;
   return m_stack->addWidget(page);
 }
 
+int SideDrawer::rootOf(int page) const {
+  int guard = 0;
+  while (parentOf(page) >= 0 && ++guard < 16) page = parentOf(page);
+  return page;
+}
+
 void SideDrawer::toggle(int page) {
+  // On a sub-page the main menu button leads back to its section.
   if (m_open && m_stack->currentIndex() == page)
     close();
   else
@@ -43,6 +58,7 @@ void SideDrawer::toggle(int page) {
 void SideDrawer::open(int page) {
   m_stack->setCurrentIndex(page);
   m_title->setText(m_titles.value(page));
+  m_back->setVisible(parentOf(page) >= 0);
   if (m_open) {
     emit pageChanged(page);
     return;

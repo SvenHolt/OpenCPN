@@ -28,6 +28,7 @@ void AppSettings::load() {
   showChartOutlines = s.value("showChartOutlines", showChartOutlines).toBool();
   trackRecording = s.value("trackRecording", trackRecording).toBool();
   startInCockpit = s.value("startInCockpit", startInCockpit).toBool();
+  language = s.value("language", language).toString();
   s.endGroup();
 }
 
@@ -50,6 +51,7 @@ void AppSettings::save() {
   s.setValue("showChartOutlines", showChartOutlines);
   s.setValue("trackRecording", trackRecording);
   s.setValue("startInCockpit", startInCockpit);
+  s.setValue("language", language);
   s.endGroup();
 }
 

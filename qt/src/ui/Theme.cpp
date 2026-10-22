@@ -31,6 +31,25 @@ QString chevronFile(const QColor& color) {
   return path;
 }
 
+/** White check mark for checked check boxes. */
+QString checkFile() {
+  const QString path =
+      QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
+      QStringLiteral("/opencpn-qt-check.png");
+  if (!QFileInfo::exists(path)) {
+    QPixmap pm(56, 56);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(Qt::white, 7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.drawPolyline(
+        QPolygonF({QPointF(13, 29), QPointF(24, 40), QPointF(43, 17)}));
+    p.end();
+    pm.save(path);
+  }
+  return path;
+}
+
 QString rgba(const QColor& c) {
   return QStringLiteral("rgba(%1,%2,%3,%4)")
       .arg(c.red())
@@ -250,6 +269,11 @@ QSlider::groove:horizontal { height: 6px; background: @pressed; border-radius: 3
 QSlider::sub-page:horizontal { background: @accent; border-radius: 3px; }
 QSlider::handle:horizontal { background: white; width: 20px; height: 20px;
   margin: -7px 0; border-radius: 10px; }
+QCheckBox { spacing: 8px; background: transparent; }
+QCheckBox::indicator { width: 20px; height: 20px; border-radius: 6px;
+  background: @hover; border: 1px solid @border; }
+QCheckBox::indicator:checked { background: @accent; border: 1px solid @accent;
+  image: url(@check); }
 QPushButton[role="ghost"] { background: transparent; color: @dim; padding: 8px 10px; }
 QPushButton[role="ghost"]:hover { background: @hover; color: @text; }
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateTimeEdit {
@@ -305,6 +329,7 @@ QMessageBox, QDialog { background: @panelSolid; }
       .replace("@danger", rgba(p.danger))
       .replace("@panelSolid", rgba(solid))
       .replace("@border", rgba(p.panelBorder))
-      .replace("@chevron", chevronFile(p.textDim));
+      .replace("@chevron", chevronFile(p.textDim))
+      .replace("@check", checkFile());
   return s;
 }

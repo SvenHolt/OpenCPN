@@ -2,6 +2,7 @@
 
 #include <QRegularExpression>
 #include <QStringList>
+#include <cmath>
 
 static quint8 checksumOf(QStringView body) {
   quint8 c = 0;
@@ -183,6 +184,8 @@ bool NmeaParser::parseLine(const QString& raw) {
         u.rpm = *v;
       else if (t == "E" && name.contains("FUELRATE"))
         u.fuelRateLph = *v;
+      else if (t == "A" && (name.contains("ROLL") || name.contains("HEEL")))
+        u.heel = unit == "R" ? *v * 180 / M_PI : *v;
     }
   } else {
     return false;

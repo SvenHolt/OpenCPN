@@ -9,8 +9,12 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 * **großer, leichter Tacho** (SOG) mit COG/HDG und Position
 * **Navigationskarte** im „Turn-by-Turn“-Stil: Richtungspfeil, Distanz,
   ETA, Restweg und XTE
-* **Dock am unteren Rand** mit den App-Bereichen und einer roten MOB-Taste
-* **Seitenpanel**, das von links hereingleitet
+* **Dock am unteren Rand** mit dem Hauptmenü (Einstellungen, Routen,
+  Markierungen, Tracks, AIS, Gezeiten, Wetter, Versorgung, Plugins) und
+  einer roten MOB-Taste
+* **Seitenpanel**, das von links hereingleitet; unter **Einstellungen**
+  liegen Allgemein, Karten, Datenverbindungen, Offline-Daten, Segel &
+  Polare, Lichtszenen und Automationen als Unterseiten mit Zurück-Pfeil
 * **Player-Karte** für Spotify und YouTube Music (Plugin)
 * **runde Kartenbuttons**: Zoom, North-up/Course-up und Schiff folgen
 * **Nacht-, Tag- und Automatikmodus** (Wechsel um 07:00 und 19:00 Uhr),
@@ -28,8 +32,16 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
 | **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
-| **Bordsysteme · Nachtfahrt** | |
-| ![Boot](doc/screenshot-boat.png) | |
+| **Segelplan: Schläge, Wenden, Segel und Trimm** | |
+| ![Segelplan](doc/screenshot-sailplan.png) | |
+| **Bordsysteme · Nachtfahrt** | **Automation „Winter-Duschen“** |
+| ![Boot](doc/screenshot-boat.png) | ![Automation](doc/screenshot-automation.png) |
+| **Etappen: Weg auf der Karte, Diagramme** | **Logbuch: Tagesbericht** |
+| ![Etappen](doc/screenshot-legs.png) | ![Logbuch](doc/screenshot-logbook.png) |
+| **Reichweite: Wasser, Fäkalien, Batterie, Diesel** | **Proviant prüfen · Einkaufsliste** |
+| ![Reichweite](doc/screenshot-range.png) | ![Proviant](doc/screenshot-provisions.png) |
+| **Einstellungen (Hauptmenü)** | **Lichtszenen-Editor** |
+| ![Einstellungen](doc/screenshot-settings.png) | ![Lichtszenen](doc/screenshot-light-scenes.png) |
 | **Wettermodelle × Abfahrtszeit** | **Polardaten** |
 | ![Modelle](doc/screenshot-models.png) | ![Polare](doc/screenshot-polar.png) |
 | **Kartenausschnitt für Offline-Daten wählen** | **Offline-Gebiete · lokale Overpass-Instanz** |
@@ -59,9 +71,19 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Routenplanung von Hafen zu Hafen** (automatisch über Wasser, Land und Molen werden umfahren) | ✅ |
 | **Törnplanung**: Zeitfenster, Segel-/Motoranteil, Wenden/Halsen, Dauer, Ankunft, Diesel, Tageslicht (GRIB-Wind) | ✅ |
 | **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
+| **Segelplan**: Schläge mit Wendepositionen in einer Gasse um die Route (landfrei), Segelführung und Trimm je Schlag, Segelwechsel, Wenden als Wegpunkte | ✅ |
 | **Polardaten**: Import (.pol/.csv/Expedition), Tabelleneditor, Diagramm, optimale Kreuz-/Vorwindwinkel | ✅ |
 | **Wettermodelle vergleichen** (ICON, GFS, ECMWF, Météo-France, GRIB, manuell) × Abfahrtszeiten | ✅ |
-| **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
+| **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Warmwasser, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
+| **Lichtszenen-Editor**: je LED an/aus, Helligkeit und Farbe, Live-Vorschau | ✅ |
+| **Automationen** (z. B. Winter-Duschen): per Tipp oder Uhrzeit, Wochentage, Monate | ✅ |
+| **Reichweite** von Wasser, Fäkalientank, Batterie und Diesel vor Anker und unterwegs (gelernt aus den letzten Tagen/der letzten Reise, Temperaturvorhersage) | ✅ |
+| **Proviant**: Obst, Gemüse, Konserven, Dosen, Kühlschrank, TK; Verbrauch, MHD, Prüfung, Einkaufsliste | ✅ |
+| **Etappen**: automatische Aufzeichnung, Übersicht, Details mit Karte und Diagrammen (Fahrt, Krängung, Wind, Energie, Diesel, Temperatur, Tiefe) | ✅ |
+| **Logbuch**: Tagesbericht mit Crew, Wetter und Text, Daten der Etappen, Markdown-Export | ✅ |
+| Krängung aus NMEA XDR (`ROLL`/`HEEL`) | ✅ |
+| **Oberfläche auf Deutsch** (und Englisch), umschaltbar in den Einstellungen | ✅ |
+| **Hauptmenü**: Einstellungen, Routen, Markierungen, Tracks, AIS, Gezeiten, Wetter; Konfiguration und Offline unter Einstellungen | ✅ |
 | **Reisen offline speichern** (Route, Planung, Modelle, GRIB, Häfen und Küste entlang der Route) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
 | GPX-Import/-Export (auch OpenCPN `navobj.xml`) | ✅ |
@@ -101,7 +123,8 @@ in den Einstellungen lässt sich die Karte als Startansicht wählen.
   * Tankstand in Prozent und Litern
   * Reichweite aus Tankinhalt, Verbrauch und SOG
   * Betriebsstunden
-* **Segel-Seite** (Tippen auf die Segelanzeige oder Dock „Segel“):
+* **Segel-Seite** (Tippen auf die Segelanzeige oder Einstellungen →
+  „Segel & Polare“):
   * Antrieb: Segeln, Motorsegeln, Motor
   * Großsegel: geborgen, voll, 1.–3. Reff
   * Vorsegel: Genua mit Rollung in %, Fock, Sturmfock
@@ -189,18 +212,48 @@ Dritte Ansicht im Dock neben Cockpit und Karte (Taste `B`):
   * Webasto mit den Warmluftleitungen in die Räume (orange beim Heizen).
 * **Lichtszenen:** Nachtfahrt (rot, stark gedimmt, nur Salon, Kartentisch,
   Fußbodenlicht, Pantry, Bad), Abend (warmweiß 50 %), Hell, Vor Anker
-  (Ankerlicht an, Positionslaternen aus, Salon indirekt) und Alles aus.
-  Positionslaternen schalten die Szenen nicht mit. Das Modell kennt je LED
-  Helligkeit und Farbe; die Bedienung pro LED folgt mit der digitalen
-  Schaltung.
+  (Ankerlicht an, Positionslaternen aus, Salon indirekt), Duschen (Bad hell
+  neutralweiß, Salon indirekt gedimmt) und Alles aus. Die Knöpfe unter dem
+  Layout schalten sie; der Paletten-Knopf öffnet den Editor.
+* **Lichtszenen-Editor** (Einstellungen → Lichtszenen):
+  * „Neue Szene“ übernimmt die Leuchten, wie sie gerade sind.
+  * Je LED: gehört zur Szene (sonst bleibt sie, wie sie ist), an/aus,
+    Helligkeit 1–100 % und Farbe (Warmweiß, Neutralweiß, Kaltweiß,
+    Nachtrot, Bernstein, Blau, Türkis, Grün, Violett oder beliebig).
+    „Alle“ färbt alle LEDs der Szene auf einmal.
+  * Mit „Live-Vorschau“ folgen die Leuchten an Bord sofort; „Abbrechen“
+    stellt den vorherigen Zustand wieder her.
+  * Eigene Szenen lassen sich löschen, mitgelieferte zurücksetzen.
+    Gespeichert in `light-scenes.json` im Datenordner.
+* **Automationen** (Einstellungen → Automationen, Karte „Automationen“ in
+  der Bootsansicht):
+  * Eine Automation ist eine Liste von Aktionen: Heizung an/aus,
+    Raumtemperatur (Raum und °C), Warmwasser an/aus, Lichtszene, einzelne
+    Leuchte, Verbraucher.
+  * Auslöser: per Tipp oder zu einer Uhrzeit, wahlweise nur an bestimmten
+    Wochentagen und in bestimmten Monaten (Vorlagen Ganzjährig, Winter
+    Nov–Mär, Sommer). Zeitgesteuerte laufen einmal am Tag, bis zu
+    10 Minuten verspätet, und lassen sich in der Liste abschalten.
+  * Mitgeliefert: **Winter-Duschen** (Heizung an, Salon 21 °C, Bad 23 °C,
+    Warmwasser an, Lichtszene Duschen), **Warmer Morgen** (06:45 im
+    Winter, abgeschaltet), **Nachtfahrt** (Szene Nachtfahrt,
+    Positionslaternen, Instrumente, Autopilot) und **Boot verlassen**
+    (Heizung, Warmwasser, Licht, Stereo, Wechselrichter, Wasserpumpe aus).
+  * Gespeichert in `automations.json` im Datenordner.
 * **Energie (Victron):** Ladezustand, Spannung, Strom und Restlaufzeit der
   Batteriebank (SmartShunt), Solar (MPPT-Zustand, Tagesertrag), Landstrom
   mit Ladegerät (MultiPlus), Verbraucher gesamt.
 * **Heizung (Webasto Air Top):**
-  * Ein/Aus und Solltemperatur.
+  * Ein/Aus und Solltemperatur (Fühler im Salon).
+  * Weitere Räume können eine eigene Solltemperatur bekommen (z. B. Bad
+    23 °C). Klappen in den Warmluftleitungen schließen, sobald ein Raum
+    warm genug ist (Räume ohne eigene Vorgabe folgen dem Salon); die Luft
+    geht dann in die Räume, die noch kalt sind.
   * Zustände: Start, Heizen, Lüften, Nachlauf, Störung.
   * Werte: Leistung, Ausblastemperatur, Dieselverbrauch, Spannung,
     Betriebsstunden.
+* **Warmwasser-Boiler** (22 l, 500 W): Thermostat 60 °C, heizt über
+  Landstrom oder ohne Landstrom über den Wechselrichter aus der Batterie.
 * **Tanks** und **Verbraucher** (Kühlschrank, Wasserpumpe, Instrumente,
   Plotter, UKW, Autopilot, Steckdosen, Stereo, Wechselrichter,
   Bilgepumpe) mit Schaltern.
@@ -211,6 +264,96 @@ und Tanks leeren sich. Jeder Wert und jeder Schalter trägt bereits seinen
 Signal-K-Pfad (`environment.inside.<raum>.temperature`,
 `tanks.freshWater.0.currentLevel`, `electrical.switches.<id>.state` …).
 Die Signal-K-Anbindung und die Elektronik folgen später.
+
+### Etappen und Logbuch (Ansicht „Log“)
+
+Vierte Ansicht im Dock neben Cockpit, Karte und Boot (Taste `L`).
+
+**Aufzeichnung.** Sobald das Boot fährt (> 1,5 kn oder Motor an), wird
+alle 30 Sekunden aufgezeichnet: Position, Fahrt über Grund und durchs
+Wasser, Kurs, Steuerkurs, **Krängung** (NMEA `XDR` mit `ROLL`/`HEEL`),
+wahrer und scheinbarer Wind, Tiefe, Außentemperatur, Stromverbrauch und
+Ladung (Solar, Lichtmaschine, Landstrom), Ladezustand, Dieselverbrauch
+(Motor und Heizung) und Drehzahl. Nach 20 Minuten Stillstand endet die
+Etappe; die Zeit im Stillstand am Ende wird abgeschnitten, kurze
+Bewegungen im Hafen (< 0,2 sm) verworfen. Beginn und Ende neben einer
+gespeicherten Markierung (< 1 sm) übernehmen deren Namen. Gespeichert in
+`legs/<id>.json`; solange die Werte simuliert sind, gibt es vier
+Beispieletappen (Kiel – Marstal – Faaborg – Sønderborg – Kiel).
+
+**Übersicht.** Alle Etappen mit Datum, Strecke, Dauer, Durchschnitt und
+Segelanteil, darüber die Summen (Strecke, Stunden, Segelanteil, Diesel).
+
+**Details.**
+* Kennzahlen: Strecke, Dauer, Durchschnitts- und Höchstfahrt, Segelanteil,
+  größte Krängung, Wind (Mittel/Maximum), Motorstunden, Diesel,
+  verbrauchte und geladene Ah, Temperaturspanne.
+* Karte mit dem Weg auf der Basiskarte, nach Fahrt eingefärbt, mit
+  Windpfeilen, Start und Ziel.
+* Diagramme über die Zeit: Fahrt (SOG/STW), Krängung, Wind (wahr und
+  scheinbar), Windrichtung, Energie (Verbrauch/Ladung), Batterie,
+  Diesel, Außentemperatur und Tiefe. Motorfahrt ist hinterlegt.
+* Die Maus über einem Diagramm zeigt die Werte und die Position auf der
+  Karte; ein Tipp auf den Weg setzt die Markierung in allen Diagrammen.
+* „Umbenennen“ (Name, von, nach) und „Logbuch“ für den Tag der Etappe.
+
+**Logbuch.**
+* Liste der Tage (mit Etappen oder Eintrag, heute immer); ein Stift zeigt
+  geschriebene Berichte.
+* Je Tag: die aufgezeichneten Daten (Orte, Strecke, Zeit, Wind,
+  Motor, Diesel, Temperatur) mit Links zu den Etappen, dazu **Crew**,
+  **Wetter** („Aus den Daten“ trägt Wind und Temperatur ein) und der
+  **Bericht** als freier Text. Gespeichert wird beim Schreiben
+  (`logbook.json`).
+* „Logbuch exportieren“ schreibt alle Tage mit Daten und Berichten als
+  Markdown.
+
+### Versorgung: Reichweite und Proviant
+
+Hauptmenü **Supplies** (Versorgung) mit den Seiten Reichweite, Proviant und
+Proviant prüfen; die Bootsansicht zeigt die Reichweite als Karte.
+
+**Verbrauchsprotokoll.** Alle 30 Minuten werden der Wasserverbrauch, der
+Zulauf in den Fäkalientank, der Diesel (Heizung und Motor getrennt), der
+Strom (Verbraucher, davon Heizung; Solar, Landstrom, Lichtmaschine), die
+Motorstunden und die Außentemperatur aufgezeichnet, dazu der Zustand: vor
+Anker, unterwegs (Fahrt > 1,5 kn oder Motor an) oder Landstrom. 30 Tage
+bleiben gespeichert (`consumption.json`). Solange die Werte simuliert sind,
+beginnt das Protokoll mit 10 erzeugten Tagen (Ankern, Schläge, Hafen,
+Kälteeinbruch).
+
+**Reichweite.**
+* Grundlage wählbar: letzte 3, 7 oder 14 Tage oder die **letzte Reise**
+  (die letzte Zeit ohne Landstrom).
+* Die Tage werden eingeteilt: unterwegs (≥ 2 h Fahrt), Hafen (≥ 6 h
+  Landstrom) oder vor Anker. Je Art ergeben sich Wasser, Fäkalien, Motor-
+  diesel, Grundlast, Solar- und Lichtmaschinenertrag pro Tag. Mit zu wenig
+  Daten gelten typische Werte für zwei Personen.
+* Die Heizung hängt am Wetter: Diesel und Heizungsstrom werden **je
+  Heizgradtag** (Basis 18 °C) gelernt und mit der **Temperaturvorhersage**
+  (Open-Meteo, 16 Tage, Minimum und Maximum je Tag) hochgerechnet. Der
+  Solarertrag folgt der vorhergesagten Globalstrahlung. Hinter dem
+  Vorhersagezeitraum gilt deren Mittel, ohne Vorhersage (offline) die
+  gemessene Temperatur. Die letzte Vorhersage wird gespeichert.
+* Ergebnis je Ressource: Tage bis Frischwasser leer, Fäkalientank voll,
+  Batterie bei 20 % (an sonnigen Tagen lädt sie wieder) und Diesel bei der
+  Reserve (10 %); dazu Restmenge und Tagesverbrauch. Die knappste Ressource
+  ist die Grenze. Ein Diagramm zeigt die Füllstände Tag für Tag mit
+  Temperatur und Heizbedarf.
+
+**Proviant.**
+* Kategorien Obst, Gemüse, Konserven (Gläser), Dosen, Kühlschrank und
+  Tiefkühler; je Artikel Menge und Einheit (Stück, kg, g, l, Packung,
+  Dose, Glas), Mindesthaltbarkeit (ohne Angabe die typische der
+  Kategorie), geplanter Verbrauch pro Person und Tag und Mindestbestand.
+* „−“ in der Liste entnimmt eine Einheit; die **Inventur** im Artikel
+  bucht die Differenz als Verbrauch. Der Verbrauch pro Tag wird aus den
+  Entnahmen der letzten 14 Tage gemessen, sonst gilt der Plan × Crew.
+* **Prüfen** (Crew und Reisedauer einstellbar): Übersicht je Kategorie,
+  abgelaufene Artikel, bald ablaufende, Artikel, die vor dem Verbrauch
+  verderben, Artikel, die vor Reiseende ausgehen, und solche unter dem
+  Mindestbestand. Dazu eine **Einkaufsliste** für die Reise.
+* Gespeichert in `provisions.json`; `--demo` legt Beispielproviant an.
 
 ### Routenplanung von Hafen zu Hafen
 
@@ -241,7 +384,7 @@ So rechnet der Planer:
 
 #### Polardaten
 
-Unter **Segel → Polare** liegt die Polare des Bootes:
+Unter **Einstellungen → Segel & Polare** liegt die Polare des Bootes:
 
 * **Import** der üblichen Formate:
   * Tabellen von OpenCPN, qtVlm und ORC, auch als CSV mit Semikolon und
@@ -330,9 +473,39 @@ Nach der Berechnung zeigt der Bereich **Törn**:
 
 So wird gerechnet: Die Bootsgeschwindigkeit stammt aus der Polare des
 Bootes (siehe oben). Gekreuzt bzw. gehalst wird mit den Winkeln des besten
-VMG. Pro Schlaglänge von
-etwa 1,5 sm wird eine Wende gezählt. Der Wind wird alle 2 sm neu bestimmt.
-Beim Speichern erhalten die Wegpunkte ETA bzw. ETD und Fahrmodus.
+VMG. Der Wind wird alle 2 sm neu bestimmt. Beim Speichern erhalten die
+Wegpunkte ETA bzw. ETD und Fahrmodus.
+
+#### Segelplan: Segelführung, Trimm und Wenden
+
+Unter den Etappen steht der **Segelplan** für die gewählte Abfahrt und
+Windquelle:
+
+* **Schläge:** Was nicht direkt anliegt, wird gekreuzt (bzw. vor dem Wind
+  gehalst) – auf den Kursen des besten VMG, innerhalb einer **Gasse** um
+  die Kurslinie (einstellbar, Vorgabe ± 1 sm) und, mit der Basiskarte, mit
+  Abstand zum Land. Ändert sich der Wind unterwegs, ändern sich die
+  Schläge mit (Dreher werden ausgesegelt). Wird es zum Kreuzen zu eng,
+  schlägt der Plan Motorfahrt vor und warnt.
+* **Wenden und Halsen** mit Uhrzeit, Position und neuem Kurs; auf der
+  Karte als orange Rauten, die Schläge als dünne Linie. „Tacks and gybes
+  as waypoints“ übernimmt sie beim Speichern als Wegpunkte (T1, T2 …,
+  G1 …) mit Zeit und Segelführung in die Route.
+* **Segelführung je Schlag** aus dem scheinbaren Wind und dem
+  Segelinventar: Reffs im Groß, Genua in 10-%-Stufen eingerollt, Fock oder
+  Sturmfock, Gennaker, Spinnaker oder Code 0. **Segelwechsel** stehen mit
+  Zeit und Ort im Plan (grüne Quadrate auf der Karte).
+* **Trimm** (Tipp auf einen Schlag): Kurs zum Wind, Baumwinkel, Großschot,
+  Traveller, Baumniederholer, Unterliek, Achterstag, Cunningham,
+  Vorsegelschot und Holepunkt, dazu Bullenstander, Schmetterling mit
+  ausgebaumter Genua, Spinnakerbaum bzw. Gennaker-Hals.
+* „Set first sails“ übernimmt die Segel des ersten
+  Schlags in die Segelkonfiguration (Cockpit).
+
+Das **Segelinventar** steht unter Einstellungen → Segel & Polare: welche
+Segel an Bord sind (Genua, Fock, Sturmfock, Gennaker, Spinnaker, Code 0)
+und ab welchem scheinbaren Wind gerefft (1./2./3. Reff) bzw. die Genua
+eingerollt wird, dazu die Windgrenze für Gennaker und Spinnaker.
 
 Tiefen, Fahrwasser, Sperrgebiete und Brücken werden dabei **nicht**
 berücksichtigt. Die Route ist ein Vorschlag und muss vor der Fahrt auf der
@@ -342,7 +515,7 @@ Passen nicht alle Bereiche ins Dock, landen die hinteren unter **Mehr**.
 
 ### Häfen online nachladen
 
-Mit Netzwerkverbindung (abschaltbar unter Offline → „Häfen online laden“):
+Mit Netzwerkverbindung (abschaltbar unter Einstellungen → Offline-Daten → „Häfen online laden“):
 
 * **Karte:** Für den sichtbaren Ausschnitt lädt die App Häfen, Marinas,
   Tankstellen, Slipanlagen, Ankerplätze und Seezeichen in Kacheln von
@@ -363,7 +536,7 @@ Mit Netzwerkverbindung (abschaltbar unter Offline → „Häfen online laden“)
 
 ### Offline-Gebiete und lokale Overpass-Instanz
 
-Unter **Offline** legt man Gebiete an, deren OpenStreetMap-Daten (Häfen,
+Unter **Einstellungen → Offline-Daten** legt man Gebiete an, deren OpenStreetMap-Daten (Häfen,
 Marinas, Tankstellen, Slipanlagen, Seezeichen, Küste, Orte) lokal
 gespeichert und in eine **eigene Overpass-API-Instanz** importiert werden.
 Abfragen laufen danach ohne Internet.
@@ -390,7 +563,7 @@ Die Kacheln werden zusammengeführt (IDs eindeutig und sortiert) und als
 `regions/<id>.osm` gespeichert; alle Gebiete zusammen ergeben
 `combined.osm`.
 
-**Overpass-Backend** (Offline → Overpass-Einstellungen):
+**Overpass-Backend** (Offline-Daten → Overpass-Einstellungen):
 
 | Backend | Plattform | Einrichtung |
 | --- | --- | --- |
@@ -450,6 +623,20 @@ kennt:
 * **YouTube Music** hat keine öffentliche Wiedergabe-API. Es wird deshalb
   über MPRIS gesteuert (Desktop-App oder Browser-Tab).
 
+## Sprache
+
+Die Oberfläche gibt es auf **Englisch** und **Deutsch** (Einstellungen →
+Allgemein → Sprache: System, English, Deutsch; wirkt nach einem Neustart,
+„Neu starten“ startet die App gleich neu). „System“ wählt Deutsch, wenn
+das Betriebssystem auf Deutsch eingestellt ist. Auf Deutsch werden auch
+Datum und Zahlen deutsch formatiert (Dezimalkomma in den Eingabefeldern).
+Zum Ausprobieren: `--language de`.
+
+Die Übersetzung steht in `i18n/de.json` (englischer Text → deutscher Text,
+bei Pluralformen `[Einzahl, Mehrzahl]`). `python3 i18n/extract.py --check
+i18n/de.json` listet Texte ohne Übersetzung oder mit falschen Platzhaltern
+und läuft als Test (`ocpnqt_i18n_complete`) bei jedem Build.
+
 ## Bauen und Starten
 
 Voraussetzungen:
@@ -480,9 +667,10 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--charts <ordner>` | fügt einen Kartenordner hinzu |
 | `--grib <datei>` | öffnet eine GRIB-Datei |
 | `--center lat,lon[,maßstab]` | zentriert die Karte, z. B. `40.84,-73.93,15000` |
-| `--view cockpit\|chart\|boat` | Startansicht |
+| `--view cockpit\|chart\|boat\|log` | Startansicht |
+| `--language de\|en\|system` | Sprache der Oberfläche |
 | `--day` | startet im Tagmodus |
-| `--page N` | öffnet das Seitenpanel N (0 Karten, 1 Routen …) |
+| `--page NAME` | öffnet eine Seite: `settings`, `routes`, `general`, `charts`, `data`, `offline`, `sails`, `scenes`, `automations`, `supplies`, `range`, `provisions`, `provision-check` (oder ihre Nummer) |
 | `--import-osm datei.osm` | importiert eine OSM-XML-Datei als Offline-Gebiet |
 | `--select-area` | startet die Auswahl eines Kartenausschnitts |
 | `--fresh` | nutzt temporäre Einstellungen und Daten; die echte Konfiguration bleibt unberührt |
@@ -542,10 +730,18 @@ qt/
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
 │   ├── RoutePlanner       Routing über Wasser (Raster, A*, Begradigung)
 │   ├── PassagePlanner     Törnplanung (Polare, Kreuzen, Zeitfenster, Sonne)
+│   ├── SailPlan           Segelplan: Schläge, Wenden, Segelführung, Trimm
 │   ├── Polar              Polardaten (Formate, Interpolation, VMG)
 │   ├── WeatherModels      Modellvorhersagen entlang der Route (Open-Meteo)
 │   ├── Voyage             gespeicherte Reisen und Offline-Vorbereitung
-│   ├── BoatSystems        Bordsysteme (Räume, Tanks, Victron, Webasto, Licht)
+│   ├── BoatSystems        Bordsysteme (Räume, Tanks, Victron, Webasto,
+│   │                      Warmwasser, Licht, Szenen)
+│   ├── Automation         Automationen (Aktionen, Zeitplan, Speicher)
+│   ├── Consumption        Verbrauchsprotokoll (30 Tage)
+│   ├── Range              Reichweitenanalyse, Temperaturvorhersage
+│   ├── Provisions         Proviant, Verbrauch, Prüfung, Einkaufsliste
+│   ├── Legs               Etappen-Aufzeichnung und Kennzahlen
+│   ├── Logbook            Tagesberichte, Tagesdaten, Markdown
 │   ├── osm/               Overpass-Dienst (osm-3s/HTTP), Offline-Gebiete, OSM-Merge,
 │   │                      OnlineOsm (öffentliche Server, Kachel-Cache, Nominatim)
 │   └── charts/            Chart, S57Chart, BsbChart, ChartDatabase
@@ -561,6 +757,9 @@ qt/
 │   ├── PolarPanel         Polardiagramm, Import, Tabelleneditor
 │   ├── VoyageList         Reisen (offline)
 │   ├── BoatView           Ansicht „Boot“: Kabinen-Layout und Systemkarten
+│   ├── BoatPages          Lichtszenen-Editor, Automationen
+│   ├── SupplyPages        Reichweite, Proviant, Proviant prüfen
+│   ├── LogView            Ansicht „Log“: Etappen (Karte, Diagramme), Logbuch
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

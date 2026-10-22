@@ -77,10 +77,18 @@ set(OCPN_QT_CORE_SOURCES
   src/core/GribDownload.cpp
   src/core/RoutePlanner.cpp
   src/core/PassagePlanner.cpp
+  src/core/SailPlan.cpp
+  src/core/Translation.cpp
   src/core/Polar.cpp
   src/core/WeatherModels.cpp
   src/core/Voyage.cpp
   src/core/BoatSystems.cpp
+  src/core/Automation.cpp
+  src/core/Consumption.cpp
+  src/core/Range.cpp
+  src/core/Provisions.cpp
+  src/core/Legs.cpp
+  src/core/Logbook.cpp
   src/core/charts/Chart.cpp
   src/core/charts/BsbChart.cpp
   src/core/charts/S57Chart.cpp
@@ -125,6 +133,9 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/PolarPanel.cpp
   src/ui/VoyageList.cpp
   src/ui/BoatView.cpp
+  src/ui/BoatPages.cpp
+  src/ui/SupplyPages.cpp
+  src/ui/LogView.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp
@@ -135,6 +146,9 @@ target_link_libraries(ocpnqt_ui PUBLIC ocpnqt_core Qt6::Widgets Qt6::Svg
 
 add_executable(opencpn-qt src/main.cpp)
 target_link_libraries(opencpn-qt PRIVATE ocpnqt_ui)
+# User interface translations (i18n/extract.py lists the texts).
+qt_add_resources(opencpn-qt "i18n" PREFIX "/i18n" BASE "i18n"
+  FILES i18n/de.json)
 
 # Location of the basemap shapefiles shipped in the OpenCPN source tree.
 target_compile_definitions(opencpn-qt PRIVATE
@@ -237,6 +251,30 @@ if(OCPN_QT_BUILD_TESTS)
     add_executable(ocpnqt_planning_tests tests/test_planning.cpp)
     target_link_libraries(ocpnqt_planning_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_planning_tests COMMAND ocpnqt_planning_tests)
+    add_executable(ocpnqt_i18n_tests tests/test_i18n.cpp)
+    target_link_libraries(ocpnqt_i18n_tests PRIVATE ocpnqt_ui Qt6::Test)
+    target_compile_definitions(ocpnqt_i18n_tests PRIVATE
+      OCPN_QT_I18N_DIR="${CMAKE_CURRENT_SOURCE_DIR}/i18n")
+    add_test(NAME ocpnqt_i18n_tests COMMAND ocpnqt_i18n_tests)
+    set_tests_properties(ocpnqt_i18n_tests PROPERTIES
+      ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    # Every text of the user interface has a German translation.
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME ocpnqt_i18n_complete
+        COMMAND Python3::Interpreter
+          ${CMAKE_CURRENT_SOURCE_DIR}/i18n/extract.py --check
+          ${CMAKE_CURRENT_SOURCE_DIR}/i18n/de.json)
+    endif()
+    add_executable(ocpnqt_sailplan_tests tests/test_sailplan.cpp)
+    target_link_libraries(ocpnqt_sailplan_tests PRIVATE ocpnqt_core Qt6::Test)
+    add_test(NAME ocpnqt_sailplan_tests COMMAND ocpnqt_sailplan_tests)
+    add_executable(ocpnqt_legs_tests tests/test_legs.cpp)
+    target_link_libraries(ocpnqt_legs_tests PRIVATE ocpnqt_core Qt6::Test)
+    add_test(NAME ocpnqt_legs_tests COMMAND ocpnqt_legs_tests)
+    add_executable(ocpnqt_supplies_tests tests/test_supplies.cpp)
+    target_link_libraries(ocpnqt_supplies_tests PRIVATE ocpnqt_core Qt6::Test)
+    add_test(NAME ocpnqt_supplies_tests COMMAND ocpnqt_supplies_tests)
     add_executable(ocpnqt_boat_tests tests/test_boat.cpp)
     target_link_libraries(ocpnqt_boat_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_boat_tests COMMAND ocpnqt_boat_tests)

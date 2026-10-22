@@ -51,6 +51,8 @@ public:
 
   void load();
   void save() const;
+  /** Tells the listeners about other boat settings (sail inventory). */
+  void notifyChanged() { emit changed(); }
 
 signals:
   void changed();

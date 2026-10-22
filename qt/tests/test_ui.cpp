@@ -1,5 +1,7 @@
 // Smoke tests for the opencpn-qt user interface (run offscreen).
 #include <QPushButton>
+#include <QScrollArea>
+#include <QSpinBox>
 #include <QtTest>
 
 #include "core/AppSettings.h"
@@ -13,7 +15,22 @@
 #include "core/osm/OnlineOsm.h"
 #include "ui/OfflinePage.h"
 #include "core/BoatSystems.h"
+#include "ui/BoatPages.h"
+#include "ui/SupplyPages.h"
+#include "ui/LogView.h"
+#include "core/Legs.h"
+#include "core/Logbook.h"
+#include <QPlainTextEdit>
+#include "core/Provisions.h"
+#include "core/Range.h"
 #include "ui/BoatView.h"
+#include "ui/Overlays.h"
+#include "core/Automation.h"
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QLineEdit>
+#include <QSlider>
 #include "ui/PassagePanel.h"
 #include "ui/PolarPanel.h"
 #include "ui/RoutePlanPanel.h"
@@ -156,12 +173,60 @@ private slots:
     plan->click();
     QVERIFY(QTest::qWaitFor([save, panel] { return save->isVisibleTo(panel); },
                             20000));
+    // Wind from ahead: the sail plan beats with tacks.
+    auto* passage = panel->findChild<PassagePanel*>();
+    QSpinBox* windDir = nullptr;
+    for (auto* sb : passage->findChildren<QSpinBox*>())
+      if (sb->suffix() == QStringLiteral("°")) windDir = sb;
+    QVERIFY(windDir);
+    const int oldDir = windDir->value();
+    windDir->setValue(30);
+    QVERIFY(QTest::qWaitFor(
+        [passage] { return passage->sailingPlan().tacks > 0; }, 3000));
+    const SailingPlan& sp = passage->sailingPlan();
+    QVERIFY(!sp.boards.isEmpty());
+    QVERIFY(!sp.boards.first().advice.summary().isEmpty());
+    QTest::qWait(50);
+    // Board rows: a tap shows the trim.
+    ListRow* boardRow = nullptr;
+    for (auto* r : passage->findChildren<ListRow*>("sailBoard"))
+      if (!r->isHidden() && !boardRow) boardRow = r;
+    QVERIFY(boardRow);
+    auto* trim = boardRow->findChild<QLabel*>("trim");
+    QVERIFY(trim && trim->isHidden());
+    QTest::mouseClick(boardRow, Qt::LeftButton, {}, QPoint(20, 20));
+    QVERIFY(!trim->isHidden());
+    QVERIFY(trim->text().contains("Boom"));
+    QVERIFY(!passage->findChildren<QLabel*>("sailTurn").isEmpty());
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_SAILPLAN_SHOT");
+        !shot.isEmpty()) {
+      m_win->drawer()->open(m_win->pageIndex("routes"));
+      QTest::qWait(400);
+      for (QWidget* w = boardRow->parentWidget(); w; w = w->parentWidget())
+        if (auto* sa = qobject_cast<QScrollArea*>(w)) {
+          sa->ensureWidgetVisible(boardRow, 0, 160);
+          break;
+        }
+      QTest::qWait(200);
+      m_win->grab().save(shot);
+    }
+    const int tacks = sp.tacks;
     save->click();
+    windDir->setValue(oldDir);
     QCOMPARE(int(NavStore::instance().routes().size()), before + 1);
     const Route& r = NavStore::instance().routes().last();
     QCOMPARE(r.name, QStringLiteral("Kiel → Laboe"));
     QCOMPARE(r.points.first().name, QStringLiteral("Kiel"));
     QCOMPARE(r.points.last().name, QStringLiteral("Laboe"));
+    // Tacks as waypoints, with time and sails.
+    int tackPoints = 0;
+    for (const Waypoint& w : r.points)
+      if (w.name.startsWith("T") && w.name.size() <= 3) {
+        ++tackPoints;
+        QVERIFY(w.time.isValid());
+        QVERIFY(w.description.contains("Tack"));
+      }
+    QCOMPARE(tackPoints, tacks);
     QCOMPARE(NavStore::instance().activeRouteId(), r.id);
     NavStore::instance().stopNavigation();
   }
@@ -266,6 +331,438 @@ private slots:
     const QString shot = qEnvironmentVariable("OCPN_QT_TEST_BOAT_SHOT");
     if (!shot.isEmpty()) m_win->grab().save(shot);
     sys.applyScene("evening");
+    m_win->setView(MainWindow::View::Chart);
+  }
+
+  void mainMenu() {
+    // Main menu: settings first, then the navigation sections.
+    auto* dock = m_win->findChild<BottomDock*>();
+    QVERIFY(dock);
+    QStringList labels;
+    for (auto* b : dock->findChildren<DockButton*>()) labels << b->text();
+    const QStringList main = {tr("Settings"), tr("Routes"),  tr("Marks"),
+                              tr("Tracks"),   tr("AIS"),     tr("Tides"),
+                              tr("Weather"),  tr("Supplies")};
+    int last = -1;
+    for (const QString& m : main) {
+      const int i = int(labels.indexOf(m));
+      QVERIFY2(i > last, qPrintable(m + " in " + labels.join(",")));
+      last = i;
+    }
+    // Configuration pages are not in the main menu any more.
+    for (const char* gone : {"Charts", "Offline", "Sails", "Data"})
+      QVERIFY2(!labels.contains(gone), gone);
+
+    // Settings opens the hub; its rows open sub-pages with a back button.
+    SideDrawer* drawer = m_win->drawer();
+    const int settings = m_win->pageIndex("settings");
+    QCOMPARE(settings, 0);
+    drawer->open(settings);
+    SettingsHub* hub = nullptr;  // settings and supplies use hubs
+    for (auto* h : m_win->findChildren<SettingsHub*>())
+      if (h->isVisible()) hub = h;
+    QVERIFY(hub);
+    for (const char* key : {"general", "charts", "data", "offline", "sails",
+                            "scenes", "automations"}) {
+      const int page = m_win->pageIndex(key);
+      QVERIFY2(page > 0, key);
+      QCOMPARE(drawer->parentOf(page), settings);
+      QCOMPARE(drawer->rootOf(page), settings);
+    }
+    auto* row = hub->findChild<ListRow*>("settings-download");
+    QVERIFY(row);
+    QTest::mouseClick(row, Qt::LeftButton, {}, row->rect().center());
+    QCOMPARE(drawer->currentPage(), m_win->pageIndex("offline"));
+    QVERIFY(m_win->findChild<OfflinePage*>()->isVisible());
+    // The settings button stays highlighted on a sub-page.
+    DockButton* settingsButton = nullptr;
+    for (auto* b : dock->findChildren<DockButton*>())
+      if (b->text() == tr("Settings")) settingsButton = b;
+    QVERIFY(settingsButton && settingsButton->isChecked());
+    // Back to the hub.
+    IconButton* back = nullptr;
+    for (auto* b : drawer->findChildren<IconButton*>())
+      if (b->toolTip() == tr("Back")) back = b;
+    QVERIFY(back && back->isVisible());
+    back->click();
+    QCOMPARE(drawer->currentPage(), settings);
+    QVERIFY(!back->isVisible());
+    // Plugins are appended after the main sections (media plugin, if
+    // loaded) and pages by number still work.
+    QCOMPARE(m_win->pageIndex("3"), 3);
+    QCOMPARE(m_win->pageIndex("nonsense"), -1);
+    drawer->close();
+  }
+
+  void lightSceneEditor() {
+    auto& sys = BoatSystems::instance();
+    sys.applyScene("off");
+    m_win->drawer()->open(m_win->pageIndex("scenes"));
+    LightScenesPage* page = m_win->scenesPage();
+    QVERIFY(page && page->isVisible());
+    QVERIFY(page->findChild<ListRow*>("scene-shower"));
+    page->editScene({});
+    SceneEditor* ed = page->editor();
+    QVERIFY(ed->isVisible());
+    ed->findChild<QLineEdit*>()->setText("Blue saloon");
+    // Include the saloon indirect light: on, 40 %, blue.
+    auto* row = ed->findChild<QWidget*>("sceneLight-saloon_indirect");
+    QVERIFY(row);
+    row->findChild<QCheckBox*>()->setChecked(true);
+    row->findChild<ToggleSwitch*>()->setChecked(true);
+    row->findChild<QSlider*>()->setValue(40);
+    row->findChild<ColorButton*>()->setColor(QColor(40, 110, 255));
+    // The preview switches the LED right away.
+    const auto lightOf = [&sys](const QString& id) {
+      for (const auto& l : sys.lights())
+        if (l.id == id) return l;
+      return BoatLight();
+    };
+    QVERIFY(lightOf("saloon_indirect").on);
+    QCOMPARE(lightOf("saloon_indirect").color, QColor(40, 110, 255));
+    // Leave the forward cabin out of the scene.
+    ed->findChild<QWidget*>("sceneLight-fwd_ceiling")
+        ->findChild<QCheckBox*>()
+        ->setChecked(false);
+    const LightScene s = ed->scene();
+    QVERIFY(!s.find("fwd_ceiling"));
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_SCENE_SHOT");
+        !shot.isEmpty()) {
+      m_win->setView(MainWindow::View::Boat);
+      QTest::qWait(200);
+      m_win->grab().save(shot);
+      m_win->setView(MainWindow::View::Chart);
+    }
+    QCOMPARE(s.find("saloon_indirect")->brightness, 0.4);
+    const int before = int(sys.scenes().size());
+    QPushButton* save = nullptr;
+    for (auto* b : ed->findChildren<QPushButton*>())
+      if (b->text() == tr("Save")) save = b;
+    QVERIFY(save);
+    save->click();
+    QCOMPARE(int(sys.scenes().size()), before + 1);
+    const LightScene& added = sys.scenes().last();
+    QCOMPARE(added.name, QStringLiteral("Blue saloon"));
+    QCOMPARE(sys.activeScene(), added.id);
+    QVERIFY(!ed->isVisible());
+    QTest::qWait(50);
+    QVERIFY(page->findChild<ListRow*>("scene-" + added.id));
+    // The boat view lists the new scene.
+    auto* view = m_win->findChild<BoatView*>();
+    bool listed = false;
+    for (auto* b : view->findChildren<QPushButton*>())
+      if (b->property("scene").toString() == added.id) listed = true;
+    QVERIFY(listed);
+    // Cancel restores the lights after a preview.
+    const BoatLight galley = lightOf("galley_spot");
+    page->editScene("night");
+    QWidget* galleyRow = nullptr;  // the rows of the last edit are deleted
+    for (auto* w : ed->findChildren<QWidget*>("sceneLight-galley_spot"))
+      if (!w->isHidden()) galleyRow = w;
+    QVERIFY(galleyRow);
+    QCOMPARE(lightOf("galley_spot").color.green(), 28);  // night preview
+    galleyRow->findChild<ColorButton*>()->setColor(QColor(0, 255, 0));
+    QCOMPARE(lightOf("galley_spot").color, QColor(0, 255, 0));
+    for (auto* b : ed->findChildren<QPushButton*>())
+      if (b->text() == tr("Cancel")) b->click();
+    QCOMPARE(lightOf("galley_spot").color, galley.color);
+    QCOMPARE(lightOf("galley_spot").on, galley.on);
+    sys.removeScene(added.id);
+    m_win->drawer()->close();
+  }
+
+  void automationEditor() {
+    auto& store = AutomationStore::instance();
+    m_win->drawer()->open(m_win->pageIndex("automations"));
+    AutomationsPage* page = m_win->automationsPage();
+    QVERIFY(page && page->isVisible());
+    QVERIFY(page->findChild<ListRow*>("automation-winter_shower"));
+    // The winter shower opens with its five actions.
+    page->editAutomation("winter_shower");
+    AutomationEditor* ed = page->editor();
+    QCOMPARE(ed->automation().actions.size(), 5);
+    QCOMPARE(ed->automation().months, Automation::kWinter);
+    if (const QString shot =
+            qEnvironmentVariable("OCPN_QT_TEST_AUTOMATION_EDITOR_SHOT");
+        !shot.isEmpty()) {
+      QTest::qWait(200);
+      m_win->grab().save(shot);
+    }
+    // A new automation at a time of day.
+    page->editAutomation({});
+    ed->findChild<QLineEdit*>()->setText("Evening heat");
+    AutomationAction act;
+    act.type = AutomationAction::Type::ZoneSetpoint;
+    act.target = "forward";
+    act.value = 19.5;
+    ed->addAction(act);
+    const Automation a = ed->automation();
+    QCOMPARE(a.name, QStringLiteral("Evening heat"));
+    QCOMPARE(a.actions.size(), 2);  // heater on (default) + forward cabin
+    QCOMPARE(a.actions[1].type, AutomationAction::Type::ZoneSetpoint);
+    QCOMPARE(a.actions[1].target, QStringLiteral("forward"));
+    QCOMPARE(a.actions[1].value, 19.5);
+    for (auto* b : ed->findChildren<QPushButton*>())
+      if (b->text() == tr("Save")) b->click();
+    const Automation* saved = nullptr;
+    for (const auto& x : store.automations())
+      if (x.name == "Evening heat") saved = &x;
+    QVERIFY(saved);
+    const QString id = saved->id;
+    QTest::qWait(50);
+    // Run from the list.
+    auto* row = page->findChild<ListRow*>("automation-" + id);
+    QVERIFY(row);
+    row->findChild<IconButton*>("run")->click();
+    auto& sys = BoatSystems::instance();
+    QCOMPARE(sys.heater().setpointFor("forward"), 19.5);
+    QVERIFY(sys.heater().running());
+    // And from the boat view.
+    m_win->drawer()->close();
+    m_win->setView(MainWindow::View::Boat);
+    QTest::qWait(50);  // rebuilt buttons are shown by the event loop
+    auto* view = m_win->findChild<BoatView*>();
+    auto* shower = view->findChild<QPushButton*>("automation-winter_shower");
+    QVERIFY(shower && shower->isVisible());
+    shower->click();
+    QCOMPARE(sys.activeScene(), QStringLiteral("shower"));
+    QVERIFY(sys.waterHeater().on);
+    QCOMPARE(sys.heater().setpointFor("heads"), 23.0);
+    QTest::qWait(200);
+    const QString shot = qEnvironmentVariable("OCPN_QT_TEST_AUTOMATION_SHOT");
+    if (!shot.isEmpty()) m_win->grab().save(shot);
+    store.remove(id);
+    store.run("leave_boat");
+    sys.setZoneSetpoint("heads", std::numeric_limits<double>::quiet_NaN());
+    sys.setZoneSetpoint("forward", std::numeric_limits<double>::quiet_NaN());
+    sys.applyScene("evening");
+    m_win->setView(MainWindow::View::Chart);
+  }
+
+  void supplies() {
+    SideDrawer* drawer = m_win->drawer();
+    const int hub = m_win->pageIndex("supplies");
+    QVERIFY(hub > 0);
+    QCOMPARE(drawer->parentOf(hub), -1);  // main menu
+    for (const char* key : {"range", "provisions", "provision-check"})
+      QCOMPARE(drawer->parentOf(m_win->pageIndex(key)), hub);
+
+    // Range: a cold forecast shortens the diesel range.
+    const QDate today = QDate::currentDate();
+    QVector<DayForecast> mild, cold;
+    for (int i = 0; i < 14; ++i) {
+      mild << DayForecast{today.addDays(i), 15, 22, 10};
+      cold << DayForecast{today.addDays(i), -2, 3, 4};
+    }
+    auto& fc = TemperatureForecast::instance();
+    fc.setDays(mild, QPointF(10.3, 54.5), QDateTime::currentDateTimeUtc());
+    drawer->open(m_win->pageIndex("range"));
+    RangePage* page = m_win->rangePage();
+    QVERIFY(page->isVisible());
+    page->setMode(BoatMode::Anchor);
+    const double dieselMild =
+        page->result().resource(RangeResource::Diesel).days;
+    fc.setDays(cold, QPointF(10.3, 54.5), QDateTime::currentDateTimeUtc());
+    const RangeResult coldResult = page->result();
+    QVERIFY2(
+        coldResult.resource(RangeResource::Diesel).days < dieselMild,
+        qPrintable(QStringLiteral("%1 vs %2")
+                       .arg(coldResult.resource(RangeResource::Diesel).days)
+                       .arg(dieselMild)));
+    QVERIFY(coldResult.projection.first().forecast);
+    for (int k = 0; k < 4; ++k) {
+      auto* row = page->findChild<QWidget*>(QStringLiteral("range-%1").arg(k));
+      QVERIFY(row);
+      QVERIFY(!row->findChild<QLabel*>("days")->text().isEmpty());
+    }
+    // Underway: the engine.
+    page->setMode(BoatMode::Underway);
+    QVERIFY(page->result().rates.engineFuelLpd > 0);
+    page->setWindow(RangeWindow::LastTrip);
+    page->setWindow(RangeWindow::Days7);
+    QTest::qWait(400);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_RANGE_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    page->setMode(BoatMode::Anchor);
+
+    // Provisions: examples, filter, take one, edit.
+    auto& store = ProvisionStore::instance();
+    store.loadExamples(today);
+    drawer->open(m_win->pageIndex("provisions"));
+    ProvisionsPage* prov = m_win->provisionsPage();
+    QVERIFY(prov->isVisible());
+    QTest::qWait(50);
+    const ProvisionItem* tuna = nullptr;
+    for (const auto& i : store.items())
+      if (i.name == "Tuna") tuna = &i;
+    QVERIFY(tuna);
+    const QString tunaId = tuna->id;
+    const double before = tuna->quantity;
+    prov->setCategory(int(ProvisionCategory::Cans));
+    QTest::qWait(50);
+    ListRow* row = nullptr;
+    for (auto* r : prov->findChildren<ListRow*>("provision-" + tunaId))
+      if (!r->isHidden()) row = r;
+    QVERIFY(row);
+    // Only cans are listed.
+    for (auto* r : prov->findChildren<ListRow*>())
+      if (!r->isHidden() && r->objectName().startsWith("provision-")) {
+        const auto* item = store.find(r->objectName().mid(10));
+        QVERIFY(item && item->category == ProvisionCategory::Cans);
+      }
+    row->findChild<IconButton*>("take")->click();
+    QCOMPARE(store.find(tunaId)->quantity, before - 1);
+    QCOMPARE(store.find(tunaId)->usage.size(), 1);
+    // A new item through the editor.
+    prov->editItem({});
+    ProvisionEditor* ed = prov->editor();
+    QVERIFY(ed->isVisible());
+    ed->findChild<QLineEdit*>()->setText("Peaches");
+    ProvisionItem peaches = ed->item();
+    QCOMPARE(peaches.category, ProvisionCategory::Cans);
+    QVERIFY(peaches.bestBefore.isValid());  // typical shelf life
+    for (auto* b : ed->findChildren<QPushButton*>())
+      if (b->text() == tr("Save")) b->click();
+    bool found = false;
+    for (const auto& i : store.items())
+      if (i.name == "Peaches") found = i.category == ProvisionCategory::Cans;
+    QVERIFY(found);
+    QTest::qWait(50);
+    if (const QString shot =
+            qEnvironmentVariable("OCPN_QT_TEST_PROVISIONS_SHOT");
+        !shot.isEmpty()) {
+      prov->setCategory(-1);
+      QTest::qWait(100);
+      m_win->grab().save(shot);
+    }
+
+    // The check lists the problems and a shopping list.
+    drawer->open(m_win->pageIndex("provision-check"));
+    QTest::qWait(50);
+    auto* check = m_win->findChild<ProvisionCheckPage*>();
+    QVERIFY(check && check->isVisible());
+    int issues = 0;
+    for (auto* r : check->findChildren<ListRow*>("issue"))
+      if (!r->isHidden()) ++issues;
+    QCOMPARE(issues, int(store.check(today).size()));
+    QVERIFY(issues > 0);
+    QLabel* shopping = nullptr;
+    for (auto* l : check->findChildren<QLabel*>("shopping"))
+      if (!l->isHidden()) shopping = l;
+    QVERIFY(shopping && shopping->text().contains("Bread rolls"));
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_CHECK_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    drawer->close();
+
+    // The boat view shows the range.
+    m_win->setView(MainWindow::View::Boat);
+    QVERIFY(m_win->findChild<BoatView*>()->findChild<RangeCard*>());
+    if (const QString shot =
+            qEnvironmentVariable("OCPN_QT_TEST_BOAT_RANGE_SHOT");
+        !shot.isEmpty()) {
+      QTest::qWait(400);
+      m_win->grab().save(shot);
+    }
+    m_win->setView(MainWindow::View::Chart);
+    store.clear();
+  }
+
+  void logView() {
+    // The dock switches to the log view.
+    auto* dock = m_win->findChild<BottomDock*>();
+    DockButton* logButton = nullptr;
+    for (auto* b : dock->findChildren<DockButton*>())
+      if (b->text() == tr("Log")) logButton = b;
+    QVERIFY(logButton);
+    logButton->click();
+    QCOMPARE(m_win->view(), MainWindow::View::Log);
+    LogView* view = m_win->logView();
+    QVERIFY(view->isVisible());
+    QTest::qWait(100);
+
+    // Overview: one row per leg; the newest is shown.
+    const auto& legs = LegStore::instance().legs();
+    QVERIFY(legs.size() >= 4);
+    QCOMPARE(view->detail()->legId(), legs.first().id);
+    const QString older = legs[1].id;
+    ListRow* row = nullptr;
+    for (auto* r : view->findChildren<ListRow*>("leg-" + older))
+      if (!r->isHidden()) row = r;
+    QVERIFY(row);
+    QTest::mouseClick(row, Qt::LeftButton, {}, row->rect().center());
+    QCOMPARE(view->detail()->legId(), older);
+    // Charts: speed, heel, wind, energy, diesel, temperature …
+    QStringList titles;
+    for (TimeChart* c : view->detail()->charts()) {
+      titles << c->title();
+      QVERIFY2(c->pointCount(0) > 50, qPrintable(c->title()));
+    }
+    for (const QString& t : {tr("Speed"), tr("Heel"), tr("Wind"), tr("Energy"),
+                             tr("Diesel"), tr("Outside temperature")})
+      QVERIFY2(titles.contains(t), qPrintable(t));
+    // Tapping the track moves the marker in the charts.
+    TrackMap* map = view->detail()->map();
+    const Leg* leg = LegStore::instance().leg(older);
+    const int mid = int(leg->samples.size()) / 2;
+    QSignalSpy picked(map, &TrackMap::timePicked);
+    QTest::mouseClick(map, Qt::LeftButton, {}, map->screenPos(mid).toPoint());
+    QCOMPARE(picked.size(), 1);
+    const qint64 t = picked.first().first().toLongLong();
+    QVERIFY(std::llabs(t - leg->samples[mid].t) < 30 * 60);
+    // Hovering a chart moves the map marker (no crash, value box).
+    TimeChart* speed = view->detail()->charts().first();
+    QTest::mouseMove(speed, QPoint(speed->width() / 2, speed->height() / 2));
+    QTest::qWait(150);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_LEGS_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+
+    // Logbook for the day of the leg.
+    QPushButton* toBook = nullptr;
+    for (auto* b : view->detail()->findChildren<QPushButton*>())
+      if (b->text() == tr("Logbook")) toBook = b;
+    QVERIFY(toBook);
+    toBook->click();
+    QVERIFY(view->logbookShown());
+    LogbookEditor* ed = view->editor();
+    const QDate day = leg->start().toLocalTime().date();
+    QCOMPARE(ed->date(), day);
+    ed->insertWeather();
+    QVERIFY(ed->weather()->text().contains("kn"));
+    ed->crew()->setText("Sven, Anna");
+    ed->report()->setPlainText("Reefed early, a fine day under sail.");
+    ed->flush();
+    QCOMPARE(Logbook::instance().entry(day).report,
+             QStringLiteral("Reefed early, a fine day under sail."));
+    QCOMPARE(Logbook::instance().entry(day).crew, QStringLiteral("Sven, Anna"));
+    QTest::qWait(100);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_LOGBOOK_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    // Another day from the list, then back: the text is still there.
+    ListRow* today = nullptr;
+    for (auto* r : view->findChildren<ListRow*>(
+             "day-" + QDate::currentDate().toString(Qt::ISODate)))
+      if (!r->isHidden()) today = r;
+    QVERIFY(today);
+    QTest::mouseClick(today, Qt::LeftButton, {}, today->rect().center());
+    QCOMPARE(ed->date(), QDate::currentDate());
+    QVERIFY(ed->report()->toPlainText().isEmpty() ||
+            day == QDate::currentDate());
+    view->showLogbook(day);
+    QCOMPARE(ed->report()->toPlainText(),
+             QStringLiteral("Reefed early, a fine day under sail."));
+    // The day's leg opens from the logbook.
+    QTest::qWait(50);  // new buttons are shown by the event loop
+    QPushButton* dayLeg = nullptr;
+    for (auto* b : ed->findChildren<QPushButton*>("dayLeg"))
+      if (!b->isHidden()) dayLeg = b;
+    QVERIFY(dayLeg);
+    dayLeg->click();
+    QVERIFY(!view->logbookShown());
+    QCOMPARE(view->detail()->legId(), older);
     m_win->setView(MainWindow::View::Chart);
   }
 

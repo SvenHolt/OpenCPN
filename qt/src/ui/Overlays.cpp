@@ -274,9 +274,10 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   connect(mob, &QAbstractButton::clicked, this, &BottomDock::mobRequested);
   l->addWidget(mob);
   l->addSpacing(10);
-  const char* viewIcons[3] = {"gauge", "chart", "boat"};
-  const QString viewNames[3] = {tr("Cockpit"), tr("Chart"), tr("Boat")};
-  for (int i = 0; i < 3; ++i) {
+  const char* viewIcons[kViews] = {"gauge", "chart", "boat", "book"};
+  const QString viewNames[kViews] = {tr("Cockpit"), tr("Chart"), tr("Boat"),
+                                     tr("Log")};
+  for (int i = 0; i < kViews; ++i) {
     m_views[i] = new DockButton(viewIcons[i], viewNames[i], this);
     m_views[i]->setCheckable(true);
     m_views[i]->setMinimumWidth(72);
@@ -301,7 +302,7 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
       QAction* a = menu.addAction(Icons::icon(m_icons[i], Theme::p().text, 18),
                                   m_labels[i]);
       connect(a, &QAction::triggered, this,
-              [this, i] { emit sectionRequested(i); });
+              [this, i] { emit sectionRequested(m_pages[i]); });
     }
     const QSize hint = menu.sizeHint();
     menu.exec(m_more->mapToGlobal(QPoint(0, -hint.height())));
@@ -339,26 +340,27 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   updateStatus();
 }
 
-int BottomDock::addSection(const QString& icon, const QString& label) {
-  const int index = int(m_buttons.size());
+void BottomDock::addSection(const QString& icon, const QString& label,
+                            int page) {
   auto* b = new DockButton(icon, label, this);
   b->setCheckable(true);
-  b->setMinimumWidth(60);
+  b->setMinimumWidth(b->sizeHint().width() - 12);
   connect(b, &QAbstractButton::clicked, this,
-          [this, index] { emit sectionRequested(index); });
+          [this, page] { emit sectionRequested(page); });
   m_sectionLayout->addWidget(b);
   m_buttons << b;
   m_icons << icon;
   m_labels << label;
+  m_pages << page;
   fitSections();
-  return index;
 }
 
 void BottomDock::setActiveView(int view) {
-  for (int i = 0; i < 3; ++i) m_views[i]->setChecked(i == view);
+  for (int i = 0; i < kViews; ++i) m_views[i]->setChecked(i == view);
 }
 
-void BottomDock::setActiveSection(int s) {
+void BottomDock::setActiveSection(int page) {
+  const int s = int(m_pages.indexOf(page));
   m_active = s;
   for (int i = 0; i < m_buttons.size(); ++i) m_buttons[i]->setChecked(i == s);
   m_more->setChecked(s >= 0 && s < m_buttons.size() &&
@@ -372,17 +374,28 @@ void BottomDock::resizeEvent(QResizeEvent*) {
 }
 
 void BottomDock::fitSections() {
-  // Fixed parts: margins, MOB, the two view buttons, night mode, clock.
-  constexpr int kButton = 64;  // section button incl. spacing
-  int fixed = 14 + 18 + 5 * 82 + 78 + 10 + 40;
+  // Fixed parts: margins, MOB, the view buttons, night mode, clock.
+  int fixed = 14 + 18 + 82 * 2 + 78 + 10 + 40;
+  for (auto* v : m_views) fixed += v->minimumWidth() + 6;
   if (!m_status->isHidden()) fixed += m_status->sizeHint().width() + 18;
   const int available = width() - fixed;
   const int n = int(m_buttons.size());
-  int shown = std::clamp(available / kButton, 0, n);
-  if (shown < n) shown = std::max(0, (available - kButton) / kButton);
+  const auto widthOf = [this](int i) {
+    return m_buttons[i]->minimumWidth() + 4;
+  };
+  int total = 0;
+  for (int i = 0; i < n; ++i) total += widthOf(i);
+  int shown = n;
+  if (total > available) {
+    // Room for the "More" button, then as many sections as fit.
+    int used = m_more->minimumWidth() + 4;
+    shown = 0;
+    while (shown < n && used + widthOf(shown) <= available)
+      used += widthOf(shown++);
+  }
   for (int i = 0; i < n; ++i) m_buttons[i]->setVisible(i < shown);
   m_more->setVisible(shown < n);
-  setActiveSection(m_active);
+  setActiveSection(m_active >= 0 ? m_pages[m_active] : -1);
 }
 
 void BottomDock::updateStatus() {

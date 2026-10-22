@@ -138,3 +138,26 @@ class SettingsPage : public QWidget {
 public:
   explicit SettingsPage(QWidget* parent = nullptr);
 };
+
+/** Settings main page: the settings sections (general, charts, data
+ *  connections, offline data, sails, light scenes, automations) as rows
+ *  that open their sub-page. */
+class SettingsHub : public ListPage {
+  Q_OBJECT
+public:
+  explicit SettingsHub(QWidget* parent = nullptr);
+  void addGroup(const QString& title);
+  void addEntry(const QString& icon, const QString& title,
+                const QString& subtitle, int page);
+
+signals:
+  void pageRequested(int page);
+
+private:
+  void rebuild();
+  struct Entry {
+    QString icon, title, subtitle;
+    int page = -1;  // -1: group heading
+  };
+  QVector<Entry> m_entries;
+};

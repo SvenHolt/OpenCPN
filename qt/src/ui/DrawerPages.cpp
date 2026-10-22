@@ -11,6 +11,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -23,6 +24,7 @@
 #endif
 
 #include "core/AppSettings.h"
+#include "core/Translation.h"
 #include "core/Connections.h"
 #include "core/GeoMath.h"
 #include "core/GpxIO.h"
@@ -774,6 +776,36 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
       combo({tr("Cockpit"), tr("Chart")}, s.startInCockpit ? 0 : 1,
             [](int i) { AppSettings::instance().startInCockpit = i == 0; })));
 
+  // Language: takes effect after a restart (texts are set on creation).
+  {
+    const auto langs = Translation::available();
+    QStringList names;
+    int current = 0;
+    for (int i = 0; i < langs.size(); ++i) {
+      names << (langs[i].first == "system" ? tr("System") : langs[i].second);
+      if (langs[i].first == s.language) current = i;
+    }
+    auto* box = new QWidget;
+    auto* bl = new QHBoxLayout(box);
+    bl->setContentsMargins(0, 0, 0, 0);
+    auto* restart = new QPushButton(tr("Restart"));
+    restart->setProperty("role", "ghost");
+    restart->setCursor(Qt::PointingHandCursor);
+    restart->hide();
+    connect(restart, &QPushButton::clicked, this, [] {
+      QProcess::startDetached(QCoreApplication::applicationFilePath(),
+                              QCoreApplication::arguments().mid(1));
+      QCoreApplication::quit();
+    });
+    bl->addWidget(restart);
+    bl->addWidget(combo(names, current, [langs, restart](int i) {
+      AppSettings::instance().language = langs.value(i).first;
+      restart->show();
+    }));
+    l->addWidget(
+        settingRow(tr("Language"), box, tr("Takes effect after a restart")));
+  }
+
   l->addWidget(label(tr("UNITS"), "section"));
   l->addWidget(settingRow(
       tr("Speed"),
@@ -886,4 +918,45 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
   about->setContentsMargins(4, 6, 4, 6);
   l->addWidget(about);
   l->addStretch(1);
+}
+
+// --------------------------------------------------------------------------
+
+SettingsHub::SettingsHub(QWidget* parent) : ListPage(parent) {
+  connect(&Theme::instance(), &Theme::changed, this, &SettingsHub::rebuild);
+}
+
+void SettingsHub::addGroup(const QString& title) {
+  m_entries << Entry{{}, title, {}, -1};
+  rebuild();
+}
+
+void SettingsHub::addEntry(const QString& icon, const QString& title,
+                           const QString& subtitle, int page) {
+  m_entries << Entry{icon, title, subtitle, page};
+  rebuild();
+}
+
+void SettingsHub::rebuild() {
+  clearRows();
+  const Palette& pal = Theme::p();
+  for (const Entry& e : m_entries) {
+    if (e.page < 0) {
+      auto* l = label(e.title, "section");
+      l->setContentsMargins(4, 10, 0, 2);
+      addRow(l);
+      continue;
+    }
+    auto* row = new ListRow;
+    row->setObjectName("settings-" + e.icon);
+    auto* l = new QHBoxLayout(row);
+    l->setContentsMargins(14, 10, 12, 10);
+    l->setSpacing(12);
+    l->addWidget(iconLabel(e.icon, pal.accentBright));
+    l->addWidget(textColumn(e.title, e.subtitle), 1);
+    l->addWidget(iconLabel("chevron", pal.textDim, 18));
+    connect(row, &ListRow::clicked, this,
+            [this, page = e.page] { emit pageRequested(page); });
+    addRow(row);
+  }
 }

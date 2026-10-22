@@ -9,6 +9,8 @@
 #include <QStandardPaths>
 #include <QTimer>
 
+#include "core/Provisions.h"
+#include "core/Translation.h"
 #include "core/AppSettings.h"
 #include "core/Connections.h"
 #include "core/GeoMath.h"
@@ -122,11 +124,15 @@ int main(int argc, char** argv) {
                            "4000");
   QCommandLineOption demo("demo", "Create and activate a demo route.");
   QCommandLineOption day("day", "Start with the day theme.");
-  QCommandLineOption page("page", "Open a drawer page (0-4).", "index");
+  QCommandLineOption page(
+      "page",
+      "Open a drawer page: settings, routes, general, charts, data, offline, "
+      "sails, scenes, automations or its number.",
+      "page");
   QCommandLineOption charts("charts", "Add a chart directory or file.", "path");
   QCommandLineOption center(
       "center", "Center the chart: lat,lon[,display scale].", "lat,lon,scale");
-  QCommandLineOption view("view", "Start view: cockpit, chart or boat.",
+  QCommandLineOption view("view", "Start view: cockpit, chart, boat or log.",
                           "view");
   QCommandLineOption grib("grib", "Open a GRIB file.", "file");
   QCommandLineOption fresh("fresh",
@@ -135,8 +141,10 @@ int main(int argc, char** argv) {
       "import-osm", "Import an OSM XML file as offline region.", "file");
   QCommandLineOption selectArea("select-area",
                                 "Start selecting an offline area.");
+  QCommandLineOption language(
+      "language", "User interface language: de, en or system.", "code");
   cli.addOptions({shot, shotSize, delay, demo, day, page, charts, center, grib,
-                  view, fresh, importOsm, selectArea});
+                  view, fresh, importOsm, selectArea, language});
   cli.process(app);
 
   if (cli.isSet(fresh)) {
@@ -152,6 +160,9 @@ int main(int argc, char** argv) {
 
   auto& settings = AppSettings::instance();
   settings.load();
+  // Translators first: stores and widgets take their texts on creation.
+  Translation::install(cli.isSet(language) ? cli.value(language)
+                                           : settings.language);
   if (cli.isSet(day)) settings.theme = AppSettings::ThemeMode::Day;
   Theme::instance().apply();
 
@@ -171,6 +182,7 @@ int main(int argc, char** argv) {
   if (cli.isSet(view))
     win.setView(cli.value(view) == "chart"  ? MainWindow::View::Chart
                 : cli.value(view) == "boat" ? MainWindow::View::Boat
+                : cli.value(view) == "log"  ? MainWindow::View::Log
                                             : MainWindow::View::Cockpit);
   if (cli.isSet(grib)) {
     QString err;
@@ -188,6 +200,9 @@ int main(int argc, char** argv) {
     });
   }
   ConnectionManager::instance().load();
+  // The demo shows a stocked boat.
+  if (cli.isSet(demo) && ProvisionStore::instance().items().isEmpty())
+    ProvisionStore::instance().loadExamples(QDate::currentDate());
   for (const QString& file : cli.values(importOsm)) {
     QString err;
     if (!OverpassService::instance().importFile(file, QString(), &err))
@@ -208,7 +223,8 @@ int main(int argc, char** argv) {
       });
     if (cli.isSet(page))
       QTimer::singleShot(1800, &win, [&win, &cli, &page] {
-        win.drawer()->open(cli.value(page).toInt());
+        if (const int p = win.pageIndex(cli.value(page)); p >= 0)
+          win.drawer()->open(p);
       });
     QTimer::singleShot(cli.value(delay).toInt(), &win, [&win, &cli, &shot] {
       win.grab().save(cli.value(shot));
@@ -220,7 +236,8 @@ int main(int argc, char** argv) {
       QTimer::singleShot(1500, &win, [] { createDemoRoute(); });
     if (cli.isSet(page))
       QTimer::singleShot(300, &win, [&win, &cli, &page] {
-        win.drawer()->open(cli.value(page).toInt());
+        if (const int p = win.pageIndex(cli.value(page)); p >= 0)
+          win.drawer()->open(p);
       });
   }
   const int rc = app.exec();

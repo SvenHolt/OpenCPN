@@ -32,6 +32,8 @@ public:
   // Track recording
   bool trackRecording = true;
   bool startInCockpit = true;
+  // User interface language: "system", "en" or "de" (after a restart).
+  QString language = "system";
 
   void load();
   void save();

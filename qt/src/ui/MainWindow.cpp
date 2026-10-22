@@ -6,17 +6,21 @@
 #include <QMenu>
 
 #include "core/AppSettings.h"
+#include "core/Automation.h"
 #include "core/NavStore.h"
 #include "core/osm/Overpass.h"
+#include "ui/BoatPages.h"
 #include "ui/BoatView.h"
 #include "ui/CockpitView.h"
 #include "ui/DrawerPages.h"
 #include "ui/SailPage.h"
 #include "ui/Icons.h"
+#include "ui/LogView.h"
 #include "ui/OfflinePage.h"
 #include "ui/RoutePlanPanel.h"
 #include "ui/Overlays.h"
 #include "ui/SideDrawer.h"
+#include "ui/SupplyPages.h"
 #include "ui/Theme.h"
 #include "ui/TidesPage.h"
 #include "ui/TracksPage.h"
@@ -42,6 +46,8 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_areaBar = new AreaSelectBar(this);
   m_cockpit = new CockpitView(this);
   m_boat = new BoatView(this);
+  m_log = new LogView(this);
+  m_log->setLand(m_chart->landData());
   m_toast = new Toast(this);
   m_drawer = new SideDrawer(this);
   m_dock = new BottomDock(this);
@@ -50,10 +56,15 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_instrumentsAnim.setDuration(260);
   m_instrumentsAnim.setEasingCurve(QEasingCurve::OutCubic);
 
+  // Main menu: settings, routes, marks, tracks, AIS, tides, weather
+  // (plugins append their sections). Everything that configures the app
+  // lives under settings, including the offline data.
+  auto* hub = new SettingsHub;
+  m_settingsSection = addSection("sliders", tr("Settings"), hub);
+  connect(hub, &SettingsHub::pageRequested, m_drawer, &SideDrawer::open);
   auto* routes = new RoutesPage(m_chart);
   m_routes = routes;
   auto* ais = new AisPage(m_chart);
-  addSection("chart", tr("Charts"), new ChartsPage(m_chart));
   m_routesSection = addSection("route", tr("Routes"), routes);
   addSection("pin", tr("Marks"), new MarksPage(m_chart));
   addSection("flag", tr("Tracks"), new TracksPage(m_chart));
@@ -63,33 +74,108 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_chart->addLayer(new TideLayer(this));
   addSection("wind", tr("Weather"), new WeatherPage(m_chart));
   m_chart->addLayer(new GribLayer(this));
-  auto* poi = new OsmPoiLayer(m_chart, this);
-  m_chart->addLayer(poi);
-  auto* offline = new OfflinePage(m_chart, poi);
-  m_offlineSection = addSection("download", tr("Offline"), offline);
-  connect(offline, &OfflinePage::selectAreaRequested, this,
-          &MainWindow::beginAreaSelect);
+  // Supplies: range of water, energy and diesel, provisions.
+  auto* supplies = new SettingsHub;
+  m_suppliesSection = addSection("basket", tr("Supplies"), supplies);
+  connect(supplies, &SettingsHub::pageRequested, m_drawer, &SideDrawer::open);
+  const auto supply = [this, supplies](const QString& key, const QString& icon,
+                                       const QString& title,
+                                       const QString& subtitle, QWidget* page) {
+    const int index = m_drawer->addPage(title, page, m_suppliesSection);
+    supplies->addEntry(icon, title, subtitle, index);
+    m_pageKeys.insert(key, index);
+    return index;
+  };
+  m_rangePage = new RangePage;
+  m_rangeSection = supply(
+      "range", "gauge", tr("Range"),
+      tr("Water, holding tank, battery, diesel – at anchor and underway"),
+      m_rangePage);
+  m_provisionsPage = new ProvisionsPage;
+  m_provisionsSection =
+      supply("provisions", "basket", tr("Provisions"),
+             tr("Fruit, vegetables, preserves, cans, fridge, freezer"),
+             m_provisionsPage);
+  auto* check = new ProvisionCheckPage;
+  supply("provision-check", "check", tr("Check provisions"),
+         tr("Lasts for the trip? Best-before dates, shopping list"), check);
+  connect(check, &ProvisionCheckPage::itemRequested, this,
+          [this](const QString& id) {
+            m_drawer->open(m_provisionsSection);
+            m_provisionsPage->editItem(id);
+          });
+  m_pageKeys.insert("supplies", m_suppliesSection);
+
   auto* timeBar = new WeatherTimeBar;
   timeBar->setProperty("chartOnly", true);
   addOverlay(timeBar, Qt::BottomLeftCorner);
-  m_sailSection = addSection("sail", tr("Sails"), new SailPage);
-  addSection("signal", tr("Data"), new ConnectionsPage);
-  addSection("sliders", tr("Settings"), new SettingsPage);
+
+  // Settings sub-pages.
+  const auto sub = [this, hub](const QString& key, const QString& icon,
+                               const QString& title, const QString& subtitle,
+                               QWidget* page) {
+    const int index = m_drawer->addPage(title, page, m_settingsSection);
+    hub->addEntry(icon, title, subtitle, index);
+    m_pageKeys.insert(key, index);
+    return index;
+  };
+  hub->addGroup(tr("APP"));
+  sub("general", "sliders", tr("General"),
+      tr("Appearance, units, chart display, alarms"), new SettingsPage);
+  sub("charts", "chart", tr("Charts"), tr("Chart folders and chart list"),
+      new ChartsPage(m_chart));
+  sub("data", "signal", tr("Data connections"),
+      tr("NMEA 0183, Signal K, GPS, AIS"), new ConnectionsPage);
+  hub->addGroup(tr("OFFLINE"));
+  auto* poi = new OsmPoiLayer(m_chart, this);
+  m_chart->addLayer(poi);
+  auto* offline = new OfflinePage(m_chart, poi);
+  m_offlineSection = sub("offline", "download", tr("Offline data"),
+                         tr("OSM areas, harbours, local Overpass"), offline);
+  connect(offline, &OfflinePage::selectAreaRequested, this,
+          &MainWindow::beginAreaSelect);
+  hub->addGroup(tr("BOAT"));
+  m_sailSection = sub("sails", "sail", tr("Sails & polar"),
+                      tr("Sail plan, reefs, polar diagram"), new SailPage);
+  m_scenesPage = new LightScenesPage;
+  m_scenesSection = sub("scenes", "bulb", tr("Light scenes"),
+                        tr("Brightness and color of every LED"), m_scenesPage);
+  m_automationsPage = new AutomationsPage;
+  m_automationsSection =
+      sub("automations", "auto", tr("Automations"),
+          tr("Heating, hot water and lights at once"), m_automationsPage);
+  m_pageKeys.insert("settings", m_settingsSection);
+  m_pageKeys.insert("routes", m_routesSection);
 
   connect(m_dock, &BottomDock::sectionRequested, m_drawer, &SideDrawer::toggle);
   connect(m_dock, &BottomDock::viewRequested, this, [this](int v) {
-    setView(v == 0 ? View::Cockpit : v == 1 ? View::Chart : View::Boat);
+    setView(v == 0   ? View::Cockpit
+            : v == 1 ? View::Chart
+            : v == 2 ? View::Boat
+                     : View::Log);
   });
   connect(m_cockpit, &CockpitView::sailConfigRequested, this,
           [this] { m_drawer->open(m_sailSection); });
   connect(m_cockpit, &CockpitView::routesRequested, this,
           [this] { m_drawer->open(m_routesSection); });
+  connect(m_boat, &BoatView::editScenesRequested, this,
+          [this] { m_drawer->open(m_scenesSection); });
+  connect(m_boat, &BoatView::automationsRequested, this,
+          [this] { m_drawer->open(m_automationsSection); });
+  connect(m_boat, &BoatView::rangeRequested, this,
+          [this] { m_drawer->open(m_rangeSection); });
+  connect(&AutomationStore::instance(), &AutomationStore::ran, this,
+          [this](const QString&, const QString& name) {
+            m_toast->showMessage(tr("Automation “%1” started").arg(name),
+                                 false);
+            layoutOverlays();
+          });
   connect(m_chart, &ChartView::navigationRequested, this,
           [this] { setView(View::Chart); });
   connect(m_dock, &BottomDock::mobRequested, this,
           [] { NavStore::instance().manOverboard(); });
   connect(m_drawer, &SideDrawer::pageChanged, this, [this](int page) {
-    m_dock->setActiveSection(page);
+    m_dock->setActiveSection(page < 0 ? -1 : m_drawer->rootOf(page));
     layoutOverlays(true);
   });
   connect(routes, &RoutesPage::newRouteRequested, this,
@@ -138,17 +224,26 @@ void MainWindow::setView(View v) {
   m_view = v;
   m_cockpit->setVisible(v == View::Cockpit);
   m_boat->setVisible(v == View::Boat);
-  m_dock->setActiveView(v == View::Cockpit ? 0 : v == View::Chart ? 1 : 2);
+  m_log->setVisible(v == View::Log);
+  m_dock->setActiveView(v == View::Cockpit ? 0
+                        : v == View::Chart ? 1
+                        : v == View::Boat  ? 2
+                                           : 3);
   layoutOverlays();
 }
 
 int MainWindow::addSection(const QString& icon, const QString& title,
                            QWidget* page) {
   const int index = m_drawer->addPage(title, page);
-  const int dockIndex = m_dock->addSection(icon, title);
-  Q_ASSERT(index == dockIndex);
-  Q_UNUSED(dockIndex);
+  m_dock->addSection(icon, title, index);
   return index;
+}
+
+int MainWindow::pageIndex(const QString& key) const {
+  bool number = false;
+  const int n = key.toInt(&number);
+  if (number) return n;
+  return m_pageKeys.value(key.toLower(), -1);
 }
 
 void MainWindow::addOverlay(QWidget* widget, Qt::Corner corner) {
@@ -208,6 +303,8 @@ void MainWindow::layoutOverlays(bool animate) {
   m_cockpit->setLeftInset(left);
   m_boat->setGeometry(0, 0, w, mapH);
   m_boat->setLeftInset(left);
+  m_log->setGeometry(0, 0, w, mapH);
+  m_log->setLeftInset(left);
 
   m_instruments->resize(m_instruments->sizeHint());
   const QPoint instPos(left + kGap - kShadow, kGap - kShadow);
@@ -291,6 +388,7 @@ void MainWindow::layoutOverlays(bool animate) {
     if (!o.first->property("chartOnly").toBool()) o.first->raise();
   // The boat view uses the whole screen for its cards.
   if (m_view == View::Boat) m_boat->raise();
+  if (m_view == View::Log) m_log->raise();
   m_drawer->raise();
   m_routeBar->raise();
   m_areaBar->raise();
@@ -448,6 +546,9 @@ void MainWindow::keyPressEvent(QKeyEvent* e) {
       break;
     case Qt::Key_B:
       setView(m_view == View::Boat ? View::Chart : View::Boat);
+      break;
+    case Qt::Key_L:
+      setView(m_view == View::Log ? View::Chart : View::Log);
       break;
     case Qt::Key_F11:
       setWindowState(windowState() ^ Qt::WindowFullScreen);

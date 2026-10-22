@@ -2,6 +2,7 @@
 
 #include <QButtonGroup>
 #include <QDoubleSpinBox>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -10,6 +11,7 @@
 #include <QVBoxLayout>
 
 #include "core/BoatConfig.h"
+#include "core/SailPlan.h"
 #include "ui/PolarPanel.h"
 #include "ui/Theme.h"
 
@@ -133,6 +135,75 @@ SailPage::SailPage(QWidget* parent) : QWidget(parent) {
   hint->setProperty("role", "dim");
   hint->setContentsMargins(4, 10, 4, 4);
   l->addWidget(hint);
+  // Sails on board and reefing points, for the sail plan of a route.
+  l->addWidget(section(tr("SAIL INVENTORY")));
+  {
+    const SailInventory inv = SailInventory::load();
+    auto* grid = new QGridLayout;
+    grid->setSpacing(6);
+    const auto store = [] {
+      BoatConfig::instance().notifyChanged();  // sail plans are redone
+    };
+    const struct {
+      QString name;
+      bool SailInventory::*flag;
+    } sails[] = {{tr("Genoa"), &SailInventory::genoa},
+                 {tr("Jib"), &SailInventory::jib},
+                 {tr("Storm jib"), &SailInventory::storm},
+                 {tr("Gennaker"), &SailInventory::gennaker},
+                 {tr("Spinnaker"), &SailInventory::spinnaker},
+                 {tr("Code 0"), &SailInventory::code0}};
+    int i = 0;
+    for (const auto& sl : sails) {
+      auto* b = new QPushButton(sl.name);
+      b->setObjectName("inventory");
+      b->setCheckable(true);
+      b->setChecked(inv.*sl.flag);
+      b->setProperty("role", "segment");
+      b->setCursor(Qt::PointingHandCursor);
+      connect(b, &QPushButton::toggled, this, [flag = sl.flag, store](bool on) {
+        SailInventory x = SailInventory::load();
+        x.*flag = on;
+        x.save();
+        store();
+      });
+      grid->addWidget(b, i / 3, i % 3);
+      ++i;
+    }
+    l->addLayout(grid);
+    const auto spin = [&](const QString& text, double value, auto apply) {
+      auto* row = new QHBoxLayout;
+      auto* lab = new QLabel(text);
+      lab->setProperty("role", "dim");
+      row->addWidget(lab, 1);
+      auto* sp = new QDoubleSpinBox;
+      sp->setRange(5, 50);
+      sp->setDecimals(0);
+      sp->setSuffix(tr(" kn"));
+      sp->setValue(value);
+      sp->setAlignment(Qt::AlignRight);
+      connect(sp, &QDoubleSpinBox::valueChanged, this,
+              [apply, store](double v) {
+                SailInventory x = SailInventory::load();
+                apply(x, v);
+                x.save();
+                store();
+              });
+      row->addWidget(sp);
+      l->addLayout(row);
+    };
+    spin(tr("Furl the genoa from (apparent)"), inv.furlStartAws,
+         [](SailInventory& x, double v) { x.furlStartAws = v; });
+    spin(tr("1st reef from (apparent)"), inv.reef1Aws,
+         [](SailInventory& x, double v) { x.reef1Aws = v; });
+    spin(tr("2nd reef from (apparent)"), inv.reef2Aws,
+         [](SailInventory& x, double v) { x.reef2Aws = v; });
+    spin(tr("3rd reef from (apparent)"), inv.reef3Aws,
+         [](SailInventory& x, double v) { x.reef3Aws = v; });
+    spin(tr("Gennaker/spinnaker up to (true)"), inv.downwindMaxTws,
+         [](SailInventory& x, double v) { x.downwindMaxTws = v; });
+  }
+
   l->addWidget(section(tr("POLAR")));
   l->addWidget(new PolarPanel);
   l->addStretch(1);

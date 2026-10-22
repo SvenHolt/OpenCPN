@@ -1,5 +1,6 @@
 #include "ui/RoutePlanPanel.h"
 
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QEvent>
 #include <QHBoxLayout>
@@ -106,6 +107,26 @@ void PlannedRouteLayer::paint(QPainter& p, const ChartView& view) {
     }
     p.setPen(QPen(c, 3.5, Qt::DashLine, Qt::RoundCap, Qt::RoundJoin));
     p.drawLine(line[i - 1], line[i]);
+  }
+  // Boards of the sail plan: thin line, tacks/gybes and sail changes.
+  if (m_track.size() > 2) {
+    QPolygonF zz;
+    for (const QPointF& g : m_track) zz << view.screenPos(g.y(), g.x());
+    p.setPen(QPen(pal.text, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    p.drawPolyline(zz);
+  }
+  for (const SailEvent& e : m_events) {
+    const QPointF c = view.screenPos(e.pos.y(), e.pos.x());
+    if (e.kind == SailEvent::Kind::Tack || e.kind == SailEvent::Kind::Gybe) {
+      p.setPen(QPen(Qt::white, 1.5));
+      p.setBrush(pal.warning);
+      p.drawPolygon(QPolygonF({c + QPointF(0, -6), c + QPointF(6, 0),
+                               c + QPointF(0, 6), c + QPointF(-6, 0)}));
+    } else if (e.kind == SailEvent::Kind::SailChange) {
+      p.setPen(QPen(Qt::white, 1.5));
+      p.setBrush(pal.success);
+      p.drawRect(QRectF(c - QPointF(4.5, 4.5), QSizeF(9, 9)));
+    }
   }
   for (int i = 0; i < line.size(); ++i) {
     const bool end = i == 0 || i == line.size() - 1;
@@ -410,6 +431,12 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
     al->addWidget(b);
   }
   connect(saveBtn, &QPushButton::clicked, this, [this] { save(false); });
+  m_withTacks = new QCheckBox(tr("Tacks and gybes as waypoints"));
+  m_withTacks->setChecked(
+      QSettings().value("Passage/tacksAsWaypoints", true).toBool());
+  connect(m_withTacks, &QCheckBox::toggled, this, [](bool on) {
+    QSettings().setValue("Passage/tacksAsWaypoints", on);
+  });
   connect(go, &QPushButton::clicked, this, [this] { save(true); });
   connect(discard, &QPushButton::clicked, this, &RoutePlanPanel::clearResult);
   auto* offline = new QPushButton(tr("Store voyage for offline use"));
@@ -424,6 +451,7 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
   auto* acl = new QVBoxLayout(actionsCol);
   acl->setContentsMargins(0, 0, 0, 0);
   acl->setSpacing(6);
+  acl->addWidget(m_withTacks);
   acl->addWidget(m_actions);
   acl->addWidget(offline);
   m_actions->show();
@@ -435,6 +463,8 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
     QVector<int> modes;
     for (const PassageLeg& leg : m_passage->plan().legs) modes << int(leg.mode);
     m_layer->setLegModes(modes);
+    const SailingPlan& sp = m_passage->sailingPlan();
+    m_layer->setSailing(sp.track, sp.events);
   });
   l->addWidget(m_passage);
   l->addWidget(m_actionsBox);
@@ -556,6 +586,7 @@ void RoutePlanPanel::finished() {
           .arg(AppSettings::instance().distanceText(m_plan.lengthNm)));
   m_actionsBox->show();
   m_layer->setPoints(m_plan.points);
+  m_passage->setWaterTest(waterTest(m_plan.points));
   m_passage->setRoute(m_plan.points);
   double s = 90, w = 180, n = -90, e = -180;
   for (const QPointF& p : m_plan.points) {
@@ -567,11 +598,81 @@ void RoutePlanPanel::finished() {
   m_chart->fitGeoBounds(s, w, n, e);
 }
 
+WaterTest RoutePlanPanel::waterTest(const QVector<QPointF>& route) const {
+  auto land = m_chart ? m_chart->landData() : nullptr;
+  if (!land || land->detailed.isEmpty() || route.isEmpty()) return {};
+  // Only the polygons near the route (lanes of a few NM).
+  QRectF box;
+  for (const QPointF& g : route) {
+    const QPointF m = geo::toMercator(g.y(), g.x());
+    box = box.isNull() ? QRectF(m, QSizeF(1e-9, 1e-9))
+                       : box.united(QRectF(m, QSizeF(1e-9, 1e-9)));
+  }
+  const double pad = 10 / geo::nmPerMercatorUnit(route.first().y());
+  box.adjust(-pad, -pad, pad, pad);
+  QVector<int> near;
+  for (int i = 0; i < land->detailed.size(); ++i)
+    if (land->detailed[i].bounds.intersects(box)) near << i;
+  return [land, near](double lat, double lon) {
+    const QPointF m = geo::toMercator(lat, lon);
+    for (int i : near) {
+      const MercatorPolygon& poly = land->detailed[i];
+      if (poly.bounds.contains(m) && poly.path.contains(m)) return false;
+    }
+    return true;
+  };
+}
+
 void RoutePlanPanel::save(bool navigate) {
   if (!m_plan.ok()) return;
   const Place a = m_from->place(), b = m_to->place();
   Route r;
   r.name = QStringLiteral("%1 → %2").arg(a.name, b.name);
+  // With tacks and gybes as waypoints: follow the boards of the sail plan.
+  const SailingPlan& sp = m_passage->sailingPlan();
+  if (m_withTacks->isChecked() && sp.tacks + sp.gybes > 0) {
+    int wp = 0, tack = 0, gybe = 0;
+    for (const SailEvent& e : sp.events) {
+      Waypoint w;
+      w.lat = e.pos.y();
+      w.lon = e.pos.x();
+      w.time = e.time;
+      switch (e.kind) {
+        case SailEvent::Kind::Start:
+          w.name = a.name;
+          break;
+        case SailEvent::Kind::Arrival:
+          w.name = b.name;
+          break;
+        case SailEvent::Kind::Waypoint:
+          w.name = QStringLiteral("WP%1").arg(++wp, 2, 10, QChar('0'));
+          break;
+        case SailEvent::Kind::Tack:
+          w.name = tr("T%1").arg(++tack);
+          w.description = e.text;
+          break;
+        case SailEvent::Kind::Gybe:
+          w.name = tr("G%1").arg(++gybe);
+          w.description = e.text;
+          break;
+        default:
+          continue;
+      }
+      // Sails of the board that starts here.
+      for (const SailBoard& bd : sp.boards)
+        if (bd.start >= e.time && e.kind != SailEvent::Kind::Arrival) {
+          if (!bd.motor)
+            w.description +=
+                (w.description.isEmpty() ? "" : " · ") + bd.advice.summary();
+          break;
+        }
+      r.points << w;
+    }
+    const QString id = NavStore::instance().addRoute(r);
+    if (navigate) NavStore::instance().activateRoute(id);
+    clearResult();
+    return;
+  }
   for (int i = 0; i < m_plan.points.size(); ++i) {
     Waypoint w;
     w.lat = m_plan.points[i].y();
@@ -638,6 +739,7 @@ void RoutePlanPanel::openVoyage(const Voyage& v) {
   m_passage->restoreState(v.settings);
   // Fresh forecasts when online (setRoute loads them), the stored ones
   // otherwise or until they arrive.
+  m_passage->setWaterTest(waterTest(v.route));
   m_passage->setRoute(v.route);
   if (!v.forecasts.isEmpty()) m_passage->setForecasts(v.forecasts, true);
   double s = 90, w = 180, n = -90, e = -180;

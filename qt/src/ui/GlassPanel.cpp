@@ -77,6 +77,11 @@ void RoundButton::paintEvent(QPaintEvent*) {
                accent ? QColor(Qt::white) : pal.text);
 }
 
+QSize DockButton::sizeHint() const {
+  const QFontMetrics fm(Theme::font(11, QFont::DemiBold));
+  return {std::max(76, fm.horizontalAdvance(text()) + 18), 60};
+}
+
 DockButton::DockButton(const QString& icon, const QString& label,
                        QWidget* parent)
     : QAbstractButton(parent), m_icon(icon) {

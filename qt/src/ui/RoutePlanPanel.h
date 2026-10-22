@@ -2,6 +2,8 @@
 // calculation over water and a preview on the chart.
 #pragma once
 
+#include "core/SailPlan.h"
+
 #include <QFutureWatcher>
 #include <QTimer>
 #include <QWidget>
@@ -39,6 +41,15 @@ public:
   void setPoints(const QVector<QPointF>& lonLat) {
     m_points = lonLat;
     m_modes.clear();
+    m_track.clear();
+    m_events.clear();
+    emit changed();
+  }
+  /** Boards (zig-zag) with tack, gybe and sail change markers. */
+  void setSailing(const QVector<QPointF>& track,
+                  const QVector<SailEvent>& events) {
+    m_track = track;
+    m_events = events;
     emit changed();
   }
   /** PassageLeg::Mode per leg, for coloring. */
@@ -50,6 +61,8 @@ public:
 private:
   QVector<QPointF> m_points;
   QVector<int> m_modes;
+  QVector<QPointF> m_track;
+  QVector<SailEvent> m_events;
 };
 
 /** Search field with suggestions for a Place. */
@@ -98,6 +111,8 @@ private:
   void save(bool navigate);
   void clearResult();
   void storeVoyage();
+  /** Land check from the basemap near the route. */
+  WaterTest waterTest(const QVector<QPointF>& route) const;
 
   ChartView* m_chart;
   PlannedRouteLayer* m_layer;
@@ -108,6 +123,7 @@ private:
   QWidget* m_actions;
   QWidget* m_actionsBox;
   PassagePanel* m_passage;
+  class QCheckBox* m_withTacks;
   QFutureWatcher<RoutePlanResult> m_watcher;
   RoutePlanResult m_plan;
   bool m_osmPending = false;

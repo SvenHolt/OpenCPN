@@ -8,6 +8,7 @@
 #include <QWidget>
 
 #include "core/PassagePlanner.h"
+#include "core/SailPlan.h"
 #include "core/WeatherModels.h"
 
 class QButtonGroup;
@@ -82,6 +83,12 @@ public:
   /** Route as x = lon, y = lat; an empty route hides the panel. */
   void setRoute(const QVector<QPointF>& route);
   const PassagePlan& plan() const { return m_plan; }
+  /** Boards, tacks, gybes and sail changes of the shown departure. */
+  const SailingPlan& sailingPlan() const { return m_sail; }
+  /** Land check for the boards (basemap); none: lane only. */
+  void setWaterTest(WaterTest water) { m_water = std::move(water); }
+  /** Half width of the lane around the rhumb line for tacking. */
+  double laneNm() const;
   PassageSettings settings() const;
 
   /** Model forecasts (online or from a stored voyage). */
@@ -107,6 +114,7 @@ private:
   WindSource windFor(const QString& id) const;
   QString sourceName(const QString& id) const;
   void showResults(const QVector<DepartureOption>& options);
+  void showSailPlan();
   void saveSettings() const;
 
   QVector<QPointF> m_route;
@@ -135,4 +143,10 @@ private:
   DepartureTimeline* m_timeline;
   QLabel* m_warnings;
   QVBoxLayout* m_legs;
+  SailingPlan m_sail;
+  WaterTest m_water;
+  QDoubleSpinBox* m_lane;
+  QLabel* m_sailSummary;
+  QVBoxLayout* m_sailList;
+  class QPushButton* m_applySails;
 };

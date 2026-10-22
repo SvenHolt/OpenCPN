@@ -1,6 +1,7 @@
 #include "ui/BoatView.h"
 
 #include <QButtonGroup>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMouseEvent>
@@ -12,9 +13,11 @@
 #include <QVBoxLayout>
 #include <cmath>
 
+#include "core/Automation.h"
 #include "core/BoatSystems.h"
 #include "ui/GlassPanel.h"
 #include "ui/Icons.h"
+#include "ui/SupplyPages.h"
 #include "ui/Theme.h"
 
 namespace {
@@ -47,6 +50,13 @@ QString degrees(double c) {
 QString watts(double w) {
   return std::abs(w) >= 1000 ? QStringLiteral("%1 kW").arg(w / 1000, 0, 'f', 2)
                              : QStringLiteral("%1 W").arg(int(std::round(w)));
+}
+
+QLabel* iconLabelFor(const QString& icon) {
+  auto* l = new QLabel;
+  l->setFixedSize(26, 26);
+  l->setPixmap(Icons::pixmap(icon, Theme::p().accentBright, 20));
+  return l;
 }
 
 void drawCentered(QPainter& p, const QPointF& c, const QString& text,
@@ -586,31 +596,30 @@ BoatView::BoatView(QWidget* parent) : QWidget(parent) {
   left->addLayout(head);
   m_layout = new CabinLayout;
   left->addWidget(m_layout, 1);
-  left->addWidget(label(
+  auto* tapHint = label(
       tr("Tap a light to switch it, the shore power inlet at the stern to "
          "plug in (simulation)."),
-      "dim"));
+      "dim");
+  tapHint->setWordWrap(true);
+  left->addWidget(tapHint);
   auto* scenes = new QHBoxLayout;
   scenes->setSpacing(8);
   m_scenes = new QButtonGroup(this);
   m_scenes->setExclusive(false);
-  for (const LightScene& s : BoatSystems::scenes()) {
-    auto* b = new QPushButton(s.name);
-    b->setProperty("role", "segment");
-    b->setProperty("scene", s.id);
-    b->setCheckable(true);
-    b->setCursor(Qt::PointingHandCursor);
-    b->setMinimumHeight(48);
-    b->setIcon(Icons::icon(
-        s.icon, s.id == "night" ? QColor(255, 60, 40) : Theme::p().text, 18));
-    if (s.id == "night")
-      b->setStyleSheet(
-          "QPushButton:checked { background: #b3261e; color: white; }");
-    m_scenes->addButton(b);
-    scenes->addWidget(b);
-    connect(b, &QPushButton::clicked, this,
-            [id = s.id] { BoatSystems::instance().applyScene(id); });
-  }
+  m_sceneRow = new QGridLayout;
+  m_sceneRow->setSpacing(8);
+  scenes->addLayout(m_sceneRow, 1);
+  auto* editScenes = new QPushButton;
+  editScenes->setObjectName("editScenes");
+  editScenes->setToolTip(tr("Edit light scenes"));
+  editScenes->setCursor(Qt::PointingHandCursor);
+  editScenes->setMinimumHeight(48);
+  editScenes->setIcon(Icons::icon("palette", Theme::p().text, 20));
+  editScenes->setIconSize(QSize(20, 20));
+  connect(editScenes, &QPushButton::clicked, this,
+          &BoatView::editScenesRequested);
+  scenes->addWidget(editScenes);
+  rebuildScenes();
   left->addLayout(scenes);
   l->addWidget(m_left, 1);
 
@@ -631,6 +640,13 @@ BoatView::BoatView(QWidget* parent) : QWidget(parent) {
   content->setAutoFillBackground(false);
 
   col->addWidget(card(tr("ENERGY · VICTRON"), new EnergyCard));
+
+  // Range at anchor and underway.
+  auto* rangeDetails = new QPushButton(tr("Details"));
+  rangeDetails->setProperty("role", "ghost");
+  rangeDetails->setCursor(Qt::PointingHandCursor);
+  connect(rangeDetails, &QPushButton::clicked, this, &BoatView::rangeRequested);
+  col->addWidget(card(tr("RANGE"), new RangeCard, rangeDetails));
 
   // Heater.
   auto* heater = new QWidget;
@@ -679,7 +695,34 @@ BoatView::BoatView(QWidget* parent) : QWidget(parent) {
   m_heaterValues = label(QString(), "dim");
   m_heaterValues->setWordWrap(true);
   hl->addWidget(m_heaterValues);
-  col->addWidget(card(tr("HEATING · WEBASTO"), heater));
+  m_zones = label(QString(), "dim");
+  m_zones->setWordWrap(true);
+  hl->addWidget(m_zones);
+  auto* wrow = new QHBoxLayout;
+  wrow->addWidget(iconLabelFor("drop"));
+  m_water = label(QString());
+  m_water->setWordWrap(true);
+  wrow->addWidget(m_water, 1);
+  m_waterOn = new ToggleSwitch;
+  m_waterOn->setToolTip(tr("Hot water boiler"));
+  connect(m_waterOn, &QAbstractButton::toggled, this,
+          [](bool on) { BoatSystems::instance().setWaterHeaterOn(on); });
+  wrow->addWidget(m_waterOn);
+  hl->addLayout(wrow);
+  col->addWidget(card(tr("HEATING · WEBASTO · HOT WATER"), heater));
+
+  // Automations: one tap runs them.
+  auto* autos = new QWidget;
+  m_automations = new QVBoxLayout(autos);
+  m_automations->setContentsMargins(0, 0, 0, 0);
+  m_automations->setSpacing(6);
+  auto* editAutos = new QPushButton(tr("Edit"));
+  editAutos->setProperty("role", "ghost");
+  editAutos->setCursor(Qt::PointingHandCursor);
+  connect(editAutos, &QPushButton::clicked, this,
+          &BoatView::automationsRequested);
+  col->addWidget(card(tr("AUTOMATIONS"), autos, editAutos));
+  rebuildAutomations();
 
   col->addWidget(card(tr("TANKS"), new TanksCard));
 
@@ -711,12 +754,80 @@ BoatView::BoatView(QWidget* parent) : QWidget(parent) {
   l->addWidget(scroll);
 
   connect(&sys, &BoatSystems::changed, this, &BoatView::sync);
-  connect(&Theme::instance(), &Theme::changed, this,
-          qOverload<>(&QWidget::update));
+  connect(&sys, &BoatSystems::scenesChanged, this, [this] {
+    rebuildScenes();
+    rebuildAutomations();
+  });
+  connect(&AutomationStore::instance(), &AutomationStore::changed, this,
+          &BoatView::rebuildAutomations);
+  connect(&Theme::instance(), &Theme::changed, this, [this] {
+    rebuildScenes();
+    rebuildAutomations();
+    update();
+  });
   sync();
 }
 
-QWidget* BoatView::card(const QString& title, QWidget* content) {
+void BoatView::rebuildScenes() {
+  for (QAbstractButton* b : m_scenes->buttons()) {
+    m_scenes->removeButton(b);
+    b->hide();
+    b->deleteLater();
+  }
+  // The scenes as buttons, six per row.
+  int n = 0;
+  for (const LightScene& s : BoatSystems::instance().scenes()) {
+    const int index = n++;
+    auto* b = new QPushButton(s.name);
+    b->setProperty("role", "segment");
+    b->setProperty("scene", s.id);
+    b->setCheckable(true);
+    b->setCursor(Qt::PointingHandCursor);
+    b->setMinimumHeight(48);
+    b->setMinimumWidth(60);
+    b->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    b->setToolTip(s.name);
+    b->setIcon(Icons::icon(
+        s.icon, s.id == "night" ? QColor(255, 60, 40) : Theme::p().text, 18));
+    if (s.id == "night")
+      b->setStyleSheet(
+          "QPushButton:checked { background: #b3261e; color: white; }");
+    m_scenes->addButton(b);
+    m_sceneRow->addWidget(b, index / 6, index % 6);
+    connect(b, &QPushButton::clicked, this,
+            [id = s.id] { BoatSystems::instance().applyScene(id); });
+    b->setChecked(s.id == BoatSystems::instance().activeScene());
+  }
+}
+
+void BoatView::rebuildAutomations() {
+  while (QLayoutItem* it = m_automations->takeAt(0)) {
+    if (QWidget* w = it->widget()) {
+      w->hide();
+      w->deleteLater();
+    }
+    delete it;
+  }
+  const Palette& pal = Theme::p();
+  for (const Automation& a : AutomationStore::instance().automations()) {
+    auto* b = new QPushButton(a.name);
+    b->setObjectName("automation-" + a.id);
+    b->setCursor(Qt::PointingHandCursor);
+    b->setMinimumHeight(44);
+    b->setIcon(Icons::icon(a.icon, pal.accentBright, 18));
+    b->setIconSize(QSize(18, 18));
+    b->setStyleSheet("text-align: left; padding-left: 14px;");
+    QStringList what;
+    for (const auto& act : a.actions) what << act.describe();
+    b->setToolTip(a.schedule() + "\n" + what.join("\n"));
+    connect(b, &QPushButton::clicked, this,
+            [id = a.id] { AutomationStore::instance().run(id); });
+    m_automations->addWidget(b);
+  }
+}
+
+QWidget* BoatView::card(const QString& title, QWidget* content,
+                        QWidget* action) {
   auto* w = new QWidget;
   w->setObjectName("boatCard");
   w->setAttribute(Qt::WA_StyledBackground);
@@ -728,7 +839,14 @@ QWidget* BoatView::card(const QString& title, QWidget* content) {
   auto* l = new QVBoxLayout(w);
   l->setContentsMargins(18, 14, 18, 16);
   l->setSpacing(10);
-  l->addWidget(label(title, "section"));
+  if (action) {
+    auto* head = new QHBoxLayout;
+    head->addWidget(label(title, "section"), 1);
+    head->addWidget(action);
+    l->addLayout(head);
+  } else {
+    l->addWidget(label(title, "section"));
+  }
   l->addWidget(content);
   return w;
 }
@@ -763,6 +881,29 @@ void BoatView::sync() {
           .arg(h.fuelLph, 0, 'f', 2)
           .arg(h.supplyV, 0, 'f', 1)
           .arg(int(h.operatingHours)));
+  // Rooms with an own target (duct flap).
+  QStringList zones;
+  for (const BoatZone& z : sys.zones()) {
+    if (z.id == h.zone || !h.zoneSetpointC.contains(z.id)) continue;
+    const double t = h.zoneSetpointC.value(z.id);
+    zones << tr("%1 %2 → %3 (flap %4)")
+                 .arg(z.name, degrees(z.temperatureC), degrees(t),
+                      z.temperatureC > t + 0.2 ? tr("closed") : tr("open"));
+  }
+  m_zones->setText(zones.join("\n"));
+  m_zones->setVisible(!zones.isEmpty());
+  const WaterHeater& w = sys.waterHeater();
+  {
+    const QSignalBlocker block(m_waterOn);
+    m_waterOn->setChecked(w.on);
+  }
+  m_water->setText(tr("Hot water %1 → %2 · %3")
+                       .arg(degrees(w.tempC), degrees(w.targetC),
+                            !w.on       ? tr("off")
+                            : w.heating ? (sys.energy().shoreConnected
+                                               ? tr("heating (shore power)")
+                                               : tr("heating (inverter)"))
+                                        : tr("ready")));
 
   for (const BoatConsumer& c : sys.consumers()) {
     QWidget* row = m_consumerSwitch.value(c.id);

@@ -2,6 +2,7 @@
 // overlays, a bottom dock and a slide-in drawer.
 #pragma once
 
+#include <QHash>
 #include <QPropertyAnimation>
 #include <QWidget>
 #include <memory>
@@ -20,7 +21,12 @@ class TargetCard;
 class SideDrawer;
 class CockpitView;
 class BoatView;
+class LogView;
 class RoutesPage;
+class LightScenesPage;
+class AutomationsPage;
+class RangePage;
+class ProvisionsPage;
 
 class MainWindow : public QWidget, public PluginHost {
   Q_OBJECT
@@ -43,11 +49,19 @@ public:
   ChartView* chart() const { return m_chart; }
   SideDrawer* drawer() const { return m_drawer; }
   void selectAisTarget(quint32 mmsi);
-  enum class View { Cockpit, Chart, Boat };
+  enum class View { Cockpit, Chart, Boat, Log };
   void setView(View v);
   View view() const { return m_view; }
   /** Lets the skipper frame an area for offline OSM data. */
   void beginAreaSelect();
+  /** Drawer page by key ("settings", "routes", "general", "charts", "data",
+   *  "offline", "sails", "scenes", "automations") or number; -1 if unknown. */
+  int pageIndex(const QString& key) const;
+  LightScenesPage* scenesPage() const { return m_scenesPage; }
+  AutomationsPage* automationsPage() const { return m_automationsPage; }
+  RangePage* rangePage() const { return m_rangePage; }
+  LogView* logView() const { return m_log; }
+  ProvisionsPage* provisionsPage() const { return m_provisionsPage; }
 
 protected:
   void resizeEvent(QResizeEvent*) override;
@@ -78,7 +92,19 @@ private:
   RoutesPage* m_routes = nullptr;
   int m_sailSection = -1;
   int m_offlineSection = -1;
+  int m_settingsSection = -1;
+  int m_scenesSection = -1;
+  int m_automationsSection = -1;
+  LightScenesPage* m_scenesPage = nullptr;
+  AutomationsPage* m_automationsPage = nullptr;
+  QHash<QString, int> m_pageKeys;
+  int m_suppliesSection = -1;
+  int m_rangeSection = -1;
+  int m_provisionsSection = -1;
+  RangePage* m_rangePage = nullptr;
+  ProvisionsPage* m_provisionsPage = nullptr;
   CockpitView* m_cockpit;
   BoatView* m_boat;
+  LogView* m_log;
   View m_view = View::Chart;
 };
