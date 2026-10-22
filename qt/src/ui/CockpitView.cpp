@@ -247,7 +247,7 @@ void CockpitView::drawRose(QPainter& p) {
         t = "N", f = Theme::font(20, QFont::Bold), col = pal.danger;
         break;
       case 90:
-        t = "E", f = Theme::font(18, QFont::Bold), col = pal.text;
+        t = tr("E"), f = Theme::font(18, QFont::Bold), col = pal.text;
         break;
       case 180:
         t = "S", f = Theme::font(18, QFont::Bold), col = pal.text;

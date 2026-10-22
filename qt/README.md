@@ -82,6 +82,7 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Etappen**: automatische Aufzeichnung, Übersicht, Details mit Karte und Diagrammen (Fahrt, Krängung, Wind, Energie, Diesel, Temperatur, Tiefe) | ✅ |
 | **Logbuch**: Tagesbericht mit Crew, Wetter und Text, Daten der Etappen, Markdown-Export | ✅ |
 | Krängung aus NMEA XDR (`ROLL`/`HEEL`) | ✅ |
+| **Oberfläche auf Deutsch** (und Englisch), umschaltbar in den Einstellungen | ✅ |
 | **Hauptmenü**: Einstellungen, Routen, Markierungen, Tracks, AIS, Gezeiten, Wetter; Konfiguration und Offline unter Einstellungen | ✅ |
 | **Reisen offline speichern** (Route, Planung, Modelle, GRIB, Häfen und Küste entlang der Route) | ✅ |
 | Routen zeichnen und abfahren, Markierungen, Mann über Bord | ✅ |
@@ -622,6 +623,20 @@ kennt:
 * **YouTube Music** hat keine öffentliche Wiedergabe-API. Es wird deshalb
   über MPRIS gesteuert (Desktop-App oder Browser-Tab).
 
+## Sprache
+
+Die Oberfläche gibt es auf **Englisch** und **Deutsch** (Einstellungen →
+Allgemein → Sprache: System, English, Deutsch; wirkt nach einem Neustart,
+„Neu starten“ startet die App gleich neu). „System“ wählt Deutsch, wenn
+das Betriebssystem auf Deutsch eingestellt ist. Auf Deutsch werden auch
+Datum und Zahlen deutsch formatiert (Dezimalkomma in den Eingabefeldern).
+Zum Ausprobieren: `--language de`.
+
+Die Übersetzung steht in `i18n/de.json` (englischer Text → deutscher Text,
+bei Pluralformen `[Einzahl, Mehrzahl]`). `python3 i18n/extract.py --check
+i18n/de.json` listet Texte ohne Übersetzung oder mit falschen Platzhaltern
+und läuft als Test (`ocpnqt_i18n_complete`) bei jedem Build.
+
 ## Bauen und Starten
 
 Voraussetzungen:
@@ -653,6 +668,7 @@ der Pfad mit `OPENCPN_DATA_DIR` setzen.
 | `--grib <datei>` | öffnet eine GRIB-Datei |
 | `--center lat,lon[,maßstab]` | zentriert die Karte, z. B. `40.84,-73.93,15000` |
 | `--view cockpit\|chart\|boat\|log` | Startansicht |
+| `--language de\|en\|system` | Sprache der Oberfläche |
 | `--day` | startet im Tagmodus |
 | `--page NAME` | öffnet eine Seite: `settings`, `routes`, `general`, `charts`, `data`, `offline`, `sails`, `scenes`, `automations`, `supplies`, `range`, `provisions`, `provision-check` (oder ihre Nummer) |
 | `--import-osm datei.osm` | importiert eine OSM-XML-Datei als Offline-Gebiet |

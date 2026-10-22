@@ -10,6 +10,7 @@
 #include <QTimer>
 
 #include "core/Provisions.h"
+#include "core/Translation.h"
 #include "core/AppSettings.h"
 #include "core/Connections.h"
 #include "core/GeoMath.h"
@@ -140,8 +141,10 @@ int main(int argc, char** argv) {
       "import-osm", "Import an OSM XML file as offline region.", "file");
   QCommandLineOption selectArea("select-area",
                                 "Start selecting an offline area.");
+  QCommandLineOption language(
+      "language", "User interface language: de, en or system.", "code");
   cli.addOptions({shot, shotSize, delay, demo, day, page, charts, center, grib,
-                  view, fresh, importOsm, selectArea});
+                  view, fresh, importOsm, selectArea, language});
   cli.process(app);
 
   if (cli.isSet(fresh)) {
@@ -157,6 +160,9 @@ int main(int argc, char** argv) {
 
   auto& settings = AppSettings::instance();
   settings.load();
+  // Translators first: stores and widgets take their texts on creation.
+  Translation::install(cli.isSet(language) ? cli.value(language)
+                                           : settings.language);
   if (cli.isSet(day)) settings.theme = AppSettings::ThemeMode::Day;
   Theme::instance().apply();
 

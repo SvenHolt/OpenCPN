@@ -11,6 +11,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -23,6 +24,7 @@
 #endif
 
 #include "core/AppSettings.h"
+#include "core/Translation.h"
 #include "core/Connections.h"
 #include "core/GeoMath.h"
 #include "core/GpxIO.h"
@@ -773,6 +775,36 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
       tr("Start screen"),
       combo({tr("Cockpit"), tr("Chart")}, s.startInCockpit ? 0 : 1,
             [](int i) { AppSettings::instance().startInCockpit = i == 0; })));
+
+  // Language: takes effect after a restart (texts are set on creation).
+  {
+    const auto langs = Translation::available();
+    QStringList names;
+    int current = 0;
+    for (int i = 0; i < langs.size(); ++i) {
+      names << (langs[i].first == "system" ? tr("System") : langs[i].second);
+      if (langs[i].first == s.language) current = i;
+    }
+    auto* box = new QWidget;
+    auto* bl = new QHBoxLayout(box);
+    bl->setContentsMargins(0, 0, 0, 0);
+    auto* restart = new QPushButton(tr("Restart"));
+    restart->setProperty("role", "ghost");
+    restart->setCursor(Qt::PointingHandCursor);
+    restart->hide();
+    connect(restart, &QPushButton::clicked, this, [] {
+      QProcess::startDetached(QCoreApplication::applicationFilePath(),
+                              QCoreApplication::arguments().mid(1));
+      QCoreApplication::quit();
+    });
+    bl->addWidget(restart);
+    bl->addWidget(combo(names, current, [langs, restart](int i) {
+      AppSettings::instance().language = langs.value(i).first;
+      restart->show();
+    }));
+    l->addWidget(
+        settingRow(tr("Language"), box, tr("Takes effect after a restart")));
+  }
 
   l->addWidget(label(tr("UNITS"), "section"));
   l->addWidget(settingRow(

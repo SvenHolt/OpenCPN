@@ -78,6 +78,7 @@ set(OCPN_QT_CORE_SOURCES
   src/core/RoutePlanner.cpp
   src/core/PassagePlanner.cpp
   src/core/SailPlan.cpp
+  src/core/Translation.cpp
   src/core/Polar.cpp
   src/core/WeatherModels.cpp
   src/core/Voyage.cpp
@@ -145,6 +146,9 @@ target_link_libraries(ocpnqt_ui PUBLIC ocpnqt_core Qt6::Widgets Qt6::Svg
 
 add_executable(opencpn-qt src/main.cpp)
 target_link_libraries(opencpn-qt PRIVATE ocpnqt_ui)
+# User interface translations (i18n/extract.py lists the texts).
+qt_add_resources(opencpn-qt "i18n" PREFIX "/i18n" BASE "i18n"
+  FILES i18n/de.json)
 
 # Location of the basemap shapefiles shipped in the OpenCPN source tree.
 target_compile_definitions(opencpn-qt PRIVATE
@@ -247,6 +251,19 @@ if(OCPN_QT_BUILD_TESTS)
     add_executable(ocpnqt_planning_tests tests/test_planning.cpp)
     target_link_libraries(ocpnqt_planning_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_planning_tests COMMAND ocpnqt_planning_tests)
+    add_executable(ocpnqt_i18n_tests tests/test_i18n.cpp)
+    target_link_libraries(ocpnqt_i18n_tests PRIVATE ocpnqt_ui Qt6::Test)
+    target_compile_definitions(ocpnqt_i18n_tests PRIVATE
+      OCPN_QT_I18N_DIR="${CMAKE_CURRENT_SOURCE_DIR}/i18n")
+    add_test(NAME ocpnqt_i18n_tests COMMAND ocpnqt_i18n_tests)
+    # Every text of the user interface has a German translation.
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME ocpnqt_i18n_complete
+        COMMAND Python3::Interpreter
+          ${CMAKE_CURRENT_SOURCE_DIR}/i18n/extract.py --check
+          ${CMAKE_CURRENT_SOURCE_DIR}/i18n/de.json)
+    endif()
     add_executable(ocpnqt_sailplan_tests tests/test_sailplan.cpp)
     target_link_libraries(ocpnqt_sailplan_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_sailplan_tests COMMAND ocpnqt_sailplan_tests)

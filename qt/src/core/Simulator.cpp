@@ -113,7 +113,7 @@ SimulatorConnection::SimulatorConnection(const ConnectionConfig& cfg,
 void SimulatorConnection::start() {
   spawnTraffic();
   m_timer.start();
-  setStatus(Status::Connected, tr("Running"));
+  setStatus(Status::Connected, tr("Simulating"));
   tick();
 }
 

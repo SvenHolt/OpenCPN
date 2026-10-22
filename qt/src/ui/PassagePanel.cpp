@@ -55,7 +55,9 @@ QString timeText(const QDateTime& t) {
 }
 
 QString compass(double deg) {
-  static const char* names[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+  const QString names[] = {
+      QObject::tr("N"), QObject::tr("NE"), QObject::tr("E"), QObject::tr("SE"),
+      QObject::tr("S"), QObject::tr("SW"), QObject::tr("W"), QObject::tr("NW")};
   return names[int(std::round(deg / 45.0)) % 8];
 }
 

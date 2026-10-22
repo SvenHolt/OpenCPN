@@ -376,6 +376,8 @@ void RangePage::refresh() {
   const UsageRates& r = m_result.rates;
   const QString where =
       m_mode == BoatMode::Anchor ? tr("At anchor") : tr("Underway");
+  const QString whereInText =
+      m_mode == BoatMode::Anchor ? tr("at anchor") : tr("underway");
   if (std::isinf(m_result.days))
     m_summary->setText(
         tr("%1 the supplies last more than 30 days.").arg(where));
@@ -445,11 +447,11 @@ void RangePage::refresh() {
   if (!r.learned)
     basis = tr("Too little logged %1 – typical values for two people are "
                "used.")
-                .arg(where.toLower());
+                .arg(whereInText);
   else
     basis = tr("Learned from %1 days %2 (%3 – %4), mean %5 °C.")
                 .arg(r.days, 0, 'f', 1)
-                .arg(where.toLower())
+                .arg(whereInText)
                 .arg(win.first.toLocalTime().toString("dd.MM. HH:mm"),
                      win.second.toLocalTime().toString("dd.MM. HH:mm"))
                 .arg(r.meanTempC, 0, 'f', 1);

@@ -18,7 +18,8 @@ namespace {
 QString tr(const char* s) { return QCoreApplication::translate("Logbook", s); }
 
 QString compass(double deg) {
-  static const char* names[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+  const QString names[] = {tr("N"), tr("NE"), tr("E"), tr("SE"),
+                           tr("S"), tr("SW"), tr("W"), tr("NW")};
   return names[int(std::round(std::fmod(deg + 360, 360) / 45)) % 8];
 }
 

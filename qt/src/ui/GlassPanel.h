@@ -64,7 +64,8 @@ public:
     update();
   }
   void setDanger(bool d) { m_danger = d; }
-  QSize sizeHint() const override { return {76, 60}; }
+  /** Wide enough for the label (German labels are longer). */
+  QSize sizeHint() const override;
 
 protected:
   void paintEvent(QPaintEvent*) override;

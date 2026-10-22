@@ -344,7 +344,7 @@ void BottomDock::addSection(const QString& icon, const QString& label,
                             int page) {
   auto* b = new DockButton(icon, label, this);
   b->setCheckable(true);
-  b->setMinimumWidth(60);
+  b->setMinimumWidth(b->sizeHint().width() - 12);
   connect(b, &QAbstractButton::clicked, this,
           [this, page] { emit sectionRequested(page); });
   m_sectionLayout->addWidget(b);
@@ -375,13 +375,24 @@ void BottomDock::resizeEvent(QResizeEvent*) {
 
 void BottomDock::fitSections() {
   // Fixed parts: margins, MOB, the view buttons, night mode, clock.
-  constexpr int kButton = 64;  // section button incl. spacing
-  int fixed = 14 + 18 + (kViews + 2) * 82 + 78 + 10 + 40;
+  int fixed = 14 + 18 + 82 * 2 + 78 + 10 + 40;
+  for (auto* v : m_views) fixed += v->minimumWidth() + 6;
   if (!m_status->isHidden()) fixed += m_status->sizeHint().width() + 18;
   const int available = width() - fixed;
   const int n = int(m_buttons.size());
-  int shown = std::clamp(available / kButton, 0, n);
-  if (shown < n) shown = std::max(0, (available - kButton) / kButton);
+  const auto widthOf = [this](int i) {
+    return m_buttons[i]->minimumWidth() + 4;
+  };
+  int total = 0;
+  for (int i = 0; i < n; ++i) total += widthOf(i);
+  int shown = n;
+  if (total > available) {
+    // Room for the "More" button, then as many sections as fit.
+    int used = m_more->minimumWidth() + 4;
+    shown = 0;
+    while (shown < n && used + widthOf(shown) <= available)
+      used += widthOf(shown++);
+  }
   for (int i = 0; i < n; ++i) m_buttons[i]->setVisible(i < shown);
   m_more->setVisible(shown < n);
   setActiveSection(m_active >= 0 ? m_pages[m_active] : -1);

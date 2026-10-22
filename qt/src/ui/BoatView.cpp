@@ -596,10 +596,12 @@ BoatView::BoatView(QWidget* parent) : QWidget(parent) {
   left->addLayout(head);
   m_layout = new CabinLayout;
   left->addWidget(m_layout, 1);
-  left->addWidget(label(
+  auto* tapHint = label(
       tr("Tap a light to switch it, the shore power inlet at the stern to "
          "plug in (simulation)."),
-      "dim"));
+      "dim");
+  tapHint->setWordWrap(true);
+  left->addWidget(tapHint);
   auto* scenes = new QHBoxLayout;
   scenes->setSpacing(8);
   m_scenes = new QButtonGroup(this);
