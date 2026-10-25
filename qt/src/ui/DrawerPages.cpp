@@ -487,6 +487,7 @@ ConnectionsPage::ConnectionsPage(QWidget* parent) : ListPage(parent) {
   m_type = new QComboBox;
   m_type->addItem(tr("UDP (listen)"), int(ConnectionConfig::Type::Udp));
   m_type->addItem(tr("TCP (client)"), int(ConnectionConfig::Type::Tcp));
+  m_type->addItem(tr("Signal K server"), int(ConnectionConfig::Type::SignalK));
 #ifdef OCPN_QT_HAVE_SERIAL
   m_type->addItem(tr("Serial port"), int(ConnectionConfig::Type::Serial));
 #endif
@@ -564,9 +565,13 @@ ConnectionsPage::ConnectionsPage(QWidget* parent) : ListPage(parent) {
 
 void ConnectionsPage::updateForm() {
   const auto t = ConnectionConfig::Type(m_type->currentData().toInt());
-  m_hostRow->setVisible(t == ConnectionConfig::Type::Tcp);
+  const bool sk = t == ConnectionConfig::Type::SignalK;
+  m_hostRow->setVisible(t == ConnectionConfig::Type::Tcp || sk);
   m_portRow->setVisible(t == ConnectionConfig::Type::Tcp ||
-                        t == ConnectionConfig::Type::Udp);
+                        t == ConnectionConfig::Type::Udp || sk);
+  // Default ports: Signal K servers listen on 3000, NMEA on 10110.
+  if (sk && m_port->value() == 10110) m_port->setValue(3000);
+  if (!sk && m_port->value() == 3000) m_port->setValue(10110);
   m_serialRow->setVisible(t == ConnectionConfig::Type::Serial);
   m_baudRow->setVisible(t == ConnectionConfig::Type::Serial);
 }

@@ -33,7 +33,13 @@
 #include <QSlider>
 #include "ui/PassagePanel.h"
 #include "ui/PolarPanel.h"
+#include "ui/GlassPanel.h"
+#include "ui/RadarView.h"
 #include "ui/RoutePlanPanel.h"
+#include "ui/SonarView.h"
+#include "core/Connections.h"
+#include "core/Radar.h"
+#include "core/Sonar.h"
 #include "ui/SideDrawer.h"
 #include "ui/Theme.h"
 #include "core/Nmea.h"
@@ -175,9 +181,7 @@ private slots:
                             20000));
     // Wind from ahead: the sail plan beats with tacks.
     auto* passage = panel->findChild<PassagePanel*>();
-    QSpinBox* windDir = nullptr;
-    for (auto* sb : passage->findChildren<QSpinBox*>())
-      if (sb->suffix() == QStringLiteral("°")) windDir = sb;
+    auto* windDir = passage->findChild<QSpinBox*>("windDir");
     QVERIFY(windDir);
     const int oldDir = windDir->value();
     windDir->setValue(30);
@@ -266,6 +270,192 @@ private slots:
     QCOMPARE(state.value("source").toString(), QStringLiteral("icon_seamless"));
     passage->restoreState(state);
     passage->setRoute({});
+  }
+
+  void passageWithCurrent() {
+    auto* passage = m_win->findChild<PassagePanel*>();
+    QVERIFY(passage);
+    passage->setRoute({{10.0, 54.0}, {10.0, 54.2}});
+    QTest::qWait(300);
+    auto* mode = passage->findChild<QComboBox*>("currentMode");
+    auto* set = passage->findChild<QSpinBox*>("currentSet");
+    auto* drift = passage->findChild<QDoubleSpinBox*>("currentDrift");
+    QVERIFY(mode && set && drift);
+    const int oldMode = mode->currentIndex();
+    mode->setCurrentIndex(2);  // off
+    QTest::qWait(300);
+    const double still = passage->plan().hours;
+    QVERIFY(!passage->plan().currentUsed);
+    // Manual: 2 kn with the course (north).
+    mode->setCurrentIndex(1);
+    set->setValue(0);
+    drift->setValue(2.0);
+    QTest::qWait(300);
+    QVERIFY(passage->plan().currentUsed);
+    QVERIFY(passage->plan().hours < still);
+    QVERIFY(passage->plan().currentGainH > 0);
+    QVERIFY(!passage->findChild<QLabel*>("currentInfo")->text().isEmpty());
+    // Arrows on the chart along the route, with the course.
+    auto* layer = m_win->findChild<PlannedRouteLayer*>();
+    QVERIFY(layer);
+    QVERIFY(!layer->currents().isEmpty());
+    QVERIFY(layer->currents().first().favourable);
+    // Against the course: slower.
+    set->setValue(180);
+    QTest::qWait(300);
+    QVERIFY(passage->plan().hours > still);
+    QVERIFY(!layer->currents().first().favourable);
+    // Stored with the voyage.
+    const QJsonObject state = passage->saveState();
+    QCOMPARE(state["currents"].toObject()["mode"].toInt(), 1);
+    QCOMPARE(state["currents"].toObject()["set"].toInt(), 180);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_CURRENTS_SHOT");
+        !shot.isEmpty()) {
+      // A tidal stream across the Fehmarnbelt route, turning on the way.
+      const QVector<QPointF> route = {
+          {11.05, 54.2}, {11.2, 54.45}, {11.1, 54.65}};
+      layer->setPoints(route);
+      passage->setRoute(route);
+      set->setValue(250);
+      drift->setValue(1.4);
+      QTest::qWait(400);
+      m_win->chart()->fitGeoBounds(54.15, 10.9, 54.7, 11.35);
+      m_win->drawer()->open(m_win->pageIndex("routes"));
+      QTest::qWait(400);
+      auto* info = passage->findChild<QLabel*>("levelInfo");
+      for (QWidget* w = info->parentWidget(); w; w = w->parentWidget())
+        if (auto* sa = qobject_cast<QScrollArea*>(w)) {
+          sa->ensureWidgetVisible(info, 0, 330);
+          break;
+        }
+      QTest::qWait(200);
+      m_win->grab().save(shot);
+      layer->setPoints({});
+    }
+    mode->setCurrentIndex(oldMode);
+    passage->setRoute({});
+  }
+
+  void radarView() {
+    const OwnShip saved = NavStore::instance().ownShip();
+    // Kiel fjord entrance: land on both sides within 2 NM.
+    auto land = std::make_shared<QVector<MercatorPolygon>>();
+    Shapefile::loadPolygons(
+        QStringLiteral(OCPN_QT_SOURCE_DATA_DIR "/basemap_shp/basemap_low.shp"),
+        *land);
+    RadarService::instance().setLand(land);
+    OwnShip own = saved;
+    own.lat = 54.41;
+    own.lon = 10.205;
+    own.hdg = own.cog = 20;
+    NavStore::instance().setOwnShip(own);
+    AisTarget ship;
+    ship.mmsi = 211555000;
+    ship.name = "STENA GERMANICA";
+    ship.shipType = 60;
+    geo::destination(own.lat, own.lon, 40, 1.1, ship.lat, ship.lon);
+    ship.sog = 12;
+    ship.cog = 200;
+    ship.lastSeen = QDateTime::currentDateTimeUtc();
+    NavStore::instance().upsertAisTarget(ship);
+
+    m_win->setView(MainWindow::View::Radar);
+    RadarView* view = m_win->radarView();
+    QVERIFY(view->isVisible());
+    view->setRangeNm(2);
+    auto& radar = RadarService::instance();
+    QVERIFY(radar.active());
+    QCOMPARE(radar.current(), QStringLiteral("sim"));
+    // One revolution of the simulated radar.
+    const int before = radar.spokeCount();
+    QVERIFY(QTest::qWaitFor(
+        [&] { return radar.spokeCount() - before >= radar.image().spokes(); },
+        6000));
+    QCOMPARE(radar.image().rangeM(), 3704);
+    // The ship ahead to starboard echoes (bearing 40°, heading 20°).
+    QVERIFY(radar.image().strongest(20, 2, 1852 * 0.95, 1852 * 1.25) >= 12);
+    QVERIFY(view->findChild<QLabel*>("radarStatus")->text().contains("Simul"));
+    // A tap on the scope: bearing and distance.
+    RadarScope* scope = view->scope();
+    const QPoint c = scope->rect().center();
+    const int r = (std::min(scope->width(), scope->height()) - 56) / 2;
+    QTest::mouseClick(scope, Qt::LeftButton, {}, c + QPoint(r / 2, 0));
+    QVERIFY(qAbs(scope->markerBearingRel() - 90) < 1);
+    QVERIFY(qAbs(scope->markerRangeNm() - 1.0) < 0.05);
+    QVERIFY(view->findChild<QLabel*>("radarMarker")->text().contains("EBL"));
+    QTest::qWait(300);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_RADAR_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    // North up turns the picture by the heading.
+    for (auto* b : view->findChildren<QPushButton*>())
+      if (b->text() == "North up") b->click();
+    QVERIFY(view->display().northUp);
+
+    // The radar on the chart.
+    auto* overlay = view->findChild<ToggleSwitch*>("radarOverlay");
+    QVERIFY(overlay);
+    overlay->setChecked(true);
+    QVERIFY(m_win->radarLayer());
+    m_win->setView(MainWindow::View::Chart);
+    QVERIFY(radar.active());  // the overlay keeps it running
+    m_win->chart()->setFollow(true);
+    m_win->chart()->zoomBy(4);
+    QTest::qWait(400);
+    if (const QString shot =
+            qEnvironmentVariable("OCPN_QT_TEST_RADAR_CHART_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    m_win->chart()->zoomBy(0.25);
+    overlay->setChecked(false);
+    QVERIFY(!radar.active());
+    for (auto* b : view->findChildren<QPushButton*>())
+      if (b->text() == "Head up") b->click();
+    NavStore::instance().setOwnShip(saved);
+  }
+
+  void sonarView() {
+    // Ten minutes of soundings: a slope with a ridge.
+    auto& sonar = SonarService::instance();
+    sonar.clear();
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    for (int i = 600; i >= 0; --i) {
+      SonarPing p;
+      p.time = now.addSecs(-i);
+      const double t = (600 - i) / 600.0;
+      p.depthM = 6 + 9 * t + 2.5 * std::exp(-std::pow((t - 0.55) / 0.06, 2));
+      p.waterTempC = 16.4;
+      sonar.addPing(p);
+    }
+    // The echo sounder goes on reading 15 m (pings every second).
+    ConnectionManager::instance().parser().parseLine(
+        NmeaParser::makeSentence("SDDPT,15.0,0.0"));
+    m_win->setView(MainWindow::View::Sonar);
+    SonarView* view = m_win->sonarView();
+    QVERIFY(view->isVisible());
+    QTest::qWait(200);
+    QCOMPARE(view->findChild<QLabel*>("sonarDepth")->text(),
+             QStringLiteral("15.0 m"));
+    QVERIFY(view->findChild<QLabel*>("sonarDetails")->text().contains("Shown"));
+    // Drawn from the depth: the bottom echo is strong, the water clear.
+    const SonarPing& last = sonar.pings().last();
+    QVERIFY(Echogram::echoAt(last, 15.05) > 200);
+    QCOMPARE(Echogram::echoAt(last, 8), 0);
+    // Echo samples are used as they are.
+    SonarPing echo;
+    echo.rangeM = 10;
+    echo.samples = QByteArray(100, 0);
+    echo.samples[50] = char(180);
+    QCOMPARE(Echogram::echoAt(echo, 5.05), 180);
+    // Automatic range above the deepest sounding.
+    Echogram* eg = view->echogram();
+    eg->setSpanSecs(900);
+    QVERIFY(eg->rangeM() >= 17.5 && eg->rangeM() <= 30);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_SONAR_SHOT");
+        !shot.isEmpty())
+      m_win->grab().save(shot);
+    eg->setSpanSecs(300);
+    m_win->setView(MainWindow::View::Chart);
   }
 
   void routesPageStableWhileNavigating() {

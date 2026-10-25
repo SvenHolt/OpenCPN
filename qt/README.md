@@ -32,12 +32,16 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
 | **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
-| **Segelplan: Schläge, Wenden, Segel und Trimm** | |
-| ![Segelplan](doc/screenshot-sailplan.png) | |
+| **Segelplan: Schläge, Wenden, Segel und Trimm** | **Gezeiten und Strömung in der Planung** |
+| ![Segelplan](doc/screenshot-sailplan.png) | ![Strömung](doc/screenshot-currents.png) |
 | **Bordsysteme · Nachtfahrt** | **Automation „Winter-Duschen“** |
 | ![Boot](doc/screenshot-boat.png) | ![Automation](doc/screenshot-automation.png) |
 | **Etappen: Weg auf der Karte, Diagramme** | **Logbuch: Tagesbericht** |
 | ![Etappen](doc/screenshot-legs.png) | ![Logbuch](doc/screenshot-logbook.png) |
+| **Radar (Signal K / Simulator)** | **Radar auf der Karte** |
+| ![Radar](doc/screenshot-radar.png) | ![Radar-Overlay](doc/screenshot-radar-chart.png) |
+| **Sonar: Echogramm** | |
+| ![Sonar](doc/screenshot-sonar.png) | |
 | **Reichweite: Wasser, Fäkalien, Batterie, Diesel** | **Proviant prüfen · Einkaufsliste** |
 | ![Reichweite](doc/screenshot-range.png) | ![Proviant](doc/screenshot-provisions.png) |
 | **Einstellungen (Hauptmenü)** | **Lichtszenen-Editor** |
@@ -67,11 +71,14 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Plugin-API** (Qt-Plugins) mit **Media-Plugin** (Spotify, YouTube Music) | ✅ |
 | NMEA 0183: RMC, GGA, GLL, VTG, HDT, THS inkl. Checksumme | ✅ |
 | AIS: Typen 1/2/3, 5, 18, 19, 24; CPA/TCPA und Kollisionsalarm | ✅ |
-| Datenquellen: UDP, TCP, seriell, Simulator; Datenmonitor | ✅ |
+| Datenquellen: UDP, TCP, seriell, **Signal K** (WebSocket), Simulator; Datenmonitor | ✅ |
+| **Radar** über Signal K (Radar-API, z. B. Mayara): Radarbild, Ringe, EBL/VRM, AIS, Voraus/Norden oben, Overlay auf der Karte; Simulator | ✅ |
+| **Sonar/Echolot**: Echogramm aus Echodaten (Signal K) oder Tiefe, Tiefe unter Kiel, Wassertemperatur | ✅ |
 | **Routenplanung von Hafen zu Hafen** (automatisch über Wasser, Land und Molen werden umfahren) | ✅ |
 | **Törnplanung**: Zeitfenster, Segel-/Motoranteil, Wenden/Halsen, Dauer, Ankunft, Diesel, Tageslicht (GRIB-Wind) | ✅ |
 | **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
 | **Segelplan**: Schläge mit Wendepositionen in einer Gasse um die Route (landfrei), Segelführung und Trimm je Schlag, Segelwechsel, Wenden als Wegpunkte | ✅ |
+| **Gezeiten und Strömung in der Törnplanung**: Flüsse und Kanäle (OSM-Fließrichtung), Gezeitenstromstationen, Seevorhersage (Open-Meteo), Pegel (PEGELONLINE), Mindestwasserstand bei Abfahrt/Ankunft | ✅ |
 | **Polardaten**: Import (.pol/.csv/Expedition), Tabelleneditor, Diagramm, optimale Kreuz-/Vorwindwinkel | ✅ |
 | **Wettermodelle vergleichen** (ICON, GFS, ECMWF, Météo-France, GRIB, manuell) × Abfahrtszeiten | ✅ |
 | **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Warmwasser, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
@@ -263,7 +270,9 @@ Heizung, die Batterie reagiert auf Verbraucher, Sonnenstand und Landstrom,
 und Tanks leeren sich. Jeder Wert und jeder Schalter trägt bereits seinen
 Signal-K-Pfad (`environment.inside.<raum>.temperature`,
 `tanks.freshWater.0.currentLevel`, `electrical.switches.<id>.state` …).
-Die Signal-K-Anbindung und die Elektronik folgen später.
+Die Bordsysteme lesen diese Pfade noch nicht von einem Signal-K-Server;
+die Signal-K-Verbindung liefert bisher Navigation, Wind, Tiefe, Motor,
+Radar und Sonar.
 
 ### Etappen und Logbuch (Ansicht „Log“)
 
@@ -307,6 +316,71 @@ Segelanteil, darüber die Summen (Strecke, Stunden, Segelanteil, Diesel).
   (`logbook.json`).
 * „Logbuch exportieren“ schreibt alle Tage mit Daten und Berichten als
   Markdown.
+
+### Signal K
+
+Unter Einstellungen → Datenverbindungen lässt sich ein **Signal-K-Server**
+als Quelle hinzufügen (Host und Port, üblich 3000; Port 443 = TLS). Die App
+abonniert den Delta-Strom des eigenen Schiffs (`/signalk/v1/stream?subscribe=self`)
+und übernimmt:
+
+* Position, Fahrt und Kurs über Grund, Steuerkurs (rechtweisend, sonst
+  missweisend mit Missweisung), Fahrt durchs Wasser, Krängung, Satelliten,
+* scheinbaren und wahren Wind,
+* Tiefe (unter Geber, sonst unter Kiel bzw. unter Oberfläche) und
+  Wassertemperatur,
+* Motordrehzahl, Kühlwassertemperatur, Öldruck, Betriebsstunden,
+  Verbrauch (`propulsion.*`).
+
+Alle Werte rechnen von SI-Einheiten um und laufen wie NMEA-Daten in die
+Navigation. Den WebSocket-Client bringt die App selbst mit; Qt WebSockets
+wird nicht gebraucht. Server mit Zugangsschutz (Token) werden noch nicht
+unterstützt.
+
+### Radar und Sonar (Ansichten „Radar“ und „Sonar“)
+
+Zwei weitere Ansichten im Dock (Tasten `R` und `S`).
+
+**Radar.** Radare liefert ein Signal-K-Server mit der **Radar-API**
+(`/signalk/v2/api/vessels/self/radars`). Ein eigenständiger
+[Mayara](https://github.com/MarineYachtRadar/mayara)-Server
+(`/v2/api/radars`) wird ebenso gefunden. Mayara bindet Radare von Navico,
+Raymarine, Furuno und Garmin ein. Die Spokes kommen als Protobuf
+(`RadarMessage`) über WebSocket; die Farblegende des Servers wird
+übernommen.
+
+* **Radarbild** (PPI): Entfernungsringe mit Abstand, Peilskala, Vorauslinie,
+  **Voraus oben** oder **Norden oben**. Den Steuerkurs liefert das Radar
+  selbst, sonst der Kompass, sonst der Kurs über Grund.
+* **AIS-Ziele** im Radarbild (gefährliche rot).
+* **EBL/VRM:** Ein Tipp ins Bild zeigt Peilung (relativ und rechtweisend)
+  und Abstand; Rechtsklick löscht.
+* **Bereich** 1/8 bis 24 sm (Tasten −/+, Mausrad), Anzeigeverstärkung,
+  Unterdrückung schwacher Echos (Seegang).
+* **Radar auf der Karte:** Das Bild liegt nordausgerichtet um das eigene
+  Schiff auf der Seekarte.
+* Ohne Server zeigt der **Simulator** Echos der Basiskarten-Küste
+  (Küstenlinie, Land, Schatten dahinter), der AIS-Ziele und Seegang nahe
+  am Boot.
+
+Die Bedienung des Radars selbst (Sendebetrieb, Bereich, Gain am Gerät)
+bleibt beim Radar bzw. der Mayara-Oberfläche. Die App zeigt an und zoomt.
+
+**Sonar.** Das Echogramm läuft von rechts (jetzt) nach links über 2, 5, 15
+oder 60 Minuten, mit Tiefenskala, Bodenlinie, Sicherheitstiefe und
+automatischem oder festem Bereich, in Farbe oder Graustufen. Daneben
+stehen die Tiefe (orange unter der Sicherheitstiefe), die Tiefe unter Kiel
+und die Wassertemperatur. Die Daten kommen aus Signal K
+(`environment.depth.*`, `environment.water.temperature`) oder NMEA 0183
+(DPT, DBT, MTW).
+
+Signal K kennt **keinen Standardpfad für Sonar-Rohdaten**. Echowerte werden
+deshalb von einem einstellbaren Pfad gelesen (Vorgabe
+`environment.depth.echogram`), z. B. von einem Plugin:
+`{"range": <m>, "samples": [0..255 oder 0..1, …]}` von der Oberfläche
+abwärts, oder `"data"` als Base64. Ohne Echowerte zeichnet die App das
+Echogramm aus den Tiefenwerten: Bodenecho und auslaufende Rückstreuung,
+ohne erfundene Fischsicheln.
 
 ### Versorgung: Reichweite und Proviant
 
@@ -511,6 +585,51 @@ Tiefen, Fahrwasser, Sperrgebiete und Brücken werden dabei **nicht**
 berücksichtigt. Die Route ist ein Vorschlag und muss vor der Fahrt auf der
 Seekarte geprüft werden.
 
+#### Gezeiten und Strömung – binnen und auf See
+
+Der Abschnitt **Gezeiten & Strömung** im Törnplaner rechnet Strömung und
+Wasserstand in die Planung ein:
+
+* **Strömung** (Automatisch, Manuell oder Aus). Automatisch nimmt je Ort
+  und Zeit die erste passende Quelle:
+  1. **Flüsse und Kanäle** aus OpenStreetMap entlang der Route. Die
+     Fließrichtung ergibt sich aus der Zeichenrichtung der Wege (immer zu
+     Tal), die Geschwindigkeit aus einer Tabelle typischer Werte (Rhein
+     3 kn, Donau 2,5, Elbe 1,6, Weser 1,2, Main/Mosel/Neckar 0,6,
+     Havel/Spree 0,3, Kanäle 0, sonst 1 kn). Jeder Fluss ist in der Liste
+     darunter einstellbar, z. B. bei Hochwasser. Tidebeeinflusste
+     Abschnitte überlassen die Strömung der Tide.
+  2. **Gezeitenstromstationen** der mitgelieferten Harmonischen, mit Flut-
+     und Ebbrichtung, gemittelt aus bis zu drei Stationen im Umkreis von
+     6 sm. Die Daten decken nur Nordamerika ab.
+  3. Die **Seevorhersage** von Open-Meteo (Gezeiten- und Triftströmung,
+     etwa 8-km-Gitter, 7 Tage) an Punkten alle 4 sm entlang der Route.
+* Gerechnet wird **über Grund**. Auf direkten Kursen hält das Boot gegen
+  den Versatz vor. Beim Kreuzen setzen sich die Schläge aus Bootsfahrt und
+  Strom zusammen, sodass Wenden und Gasse über Grund stimmen. Die
+  Motor/Segel-Entscheidung nutzt ebenfalls die Fahrt über Grund.
+* Ergebnisse: eine Kachel mit **Zeitgewinn bzw. -verlust** durch den Strom
+  und dem stärksten Strom, Strom und Fahrt über Grund je Etappe, Strom,
+  Kurs und Fahrt über Grund je Schlag im Segelplan. Auf der Karte stehen
+  **Strompfeile** entlang der Route, zur Zeit der Durchfahrt; grün heißt
+  mitlaufend, rot gegenan. Ab 2,5 kn erscheint eine Warnung.
+* **Zeitfenster:** Weil die Strömung zur jeweiligen Zeit gilt, wählt das
+  Abfahrtsfenster die Abfahrt mit dem Strom (z. B. nach dem Kentern).
+* **Wasserstand:** Für Abfahrt und Ankunft zeigt der Planer die Höhe über
+  Kartennull an der nächsten Gezeitenstation (bis 15 sm, mit HW/NW).
+  Ohne Station nimmt er den Meeresspiegel der Seevorhersage. Binnen
+  kommen die nächsten **PEGELONLINE-Pegel** (Bundeswasserstraßen) mit
+  aktuellem Wert und MW hinzu. Ein **Mindestwasserstand** bei Abfahrt
+  bzw. Ankunft (Tidehafen, Barre, Brücke) schließt zu niedrige Zeiten im
+  Abfahrtsfenster aus und warnt sonst.
+* „Laden“ lädt Seevorhersage, Flüsse und Pegel (online geschieht das
+  automatisch mit der Route). Alles wird mit der Reise **offline
+  gespeichert**.
+
+Die Werte sind Näherungen: Flussgeschwindigkeiten hängen stark vom
+Wasserstand ab, und das Modellgitter löst enge Fahrwasser nicht auf.
+Amtliche Gezeitenstromatlanten und Pegel gehen vor.
+
 Passen nicht alle Bereiche ins Dock, landen die hinteren unter **Mehr**.
 
 ### Häfen online nachladen
@@ -703,12 +822,19 @@ aktiv.
   Speicherverwaltung für sehr große Kartensätze.
 * Gezeiten: Die binären `.tcd`-Dateien (libtcd) werden noch nicht gelesen;
   die ASCII-Harmonics decken die mitgelieferten Stationen ab.
+* Strömung: Gezeitenstromstationen gibt es in den mitgelieferten Daten nur
+  für Nordamerika; in Europa kommt der Gezeitenstrom aus der
+  Seevorhersage (Open-Meteo), Flussströmungen aus einer Tabelle.
 * GRIB: JPEG-2000- und PNG-gepackte GRIB2-Daten (5.40/5.41) sowie
   Nicht-Lat/Lon-Gitter (z. B. Lambert) werden nicht unterstützt.
 * Plugins: Bestehende wxWidgets-Plugins sind nicht kompatibel. Die neue API
   ist bisher nur unter Linux/macOS getestet.
 * Media: Unter Windows und macOS gibt es noch keine Systemmediensteuerung;
   dort funktioniert nur die Spotify-Web-API.
+* Signal K: kein Login/Token; die Bordsysteme lesen ihre Signal-K-Pfade
+  noch nicht. Radar nur anzeigen (keine Gerätesteuerung, keine
+  Zielverfolgung/ARPA). Sonar-Rohdaten nur über einen eigenen Pfad, da
+  Signal K dafür keinen Standard hat.
 * Overpass: osm-3s lässt sich nicht unter Windows bauen, dort bleibt Docker
   (HTTP-Backend). Gebiete werden komplett neu importiert, Minutendiffs werden
   nicht eingespielt („Aktualisieren“ lädt das Gebiet neu). Die OSM-Daten
@@ -725,11 +851,15 @@ qt/
 │   ├── NavStore           Eigenschiff, Wind, Motor, Routen, AIS, Zielführung
 │   ├── BoatConfig         Segelkonfiguration, Antrieb, Tank
 │   ├── Connections        UDP/TCP/Seriell/Simulator → NMEA → NavStore
+│   ├── SignalK, WebSocket Signal-K-Server: Deltas → NavStore, Radarliste
+│   ├── Radar              Spokes (Protobuf), Radarbild, Simulator, Dienst
+│   ├── Sonar              Echolot-Verlauf, Echowerte aus Signal K
 │   ├── GpxIO, TrackRecorder
 │   ├── Tides              harmonische Gezeitenvorhersage
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
 │   ├── RoutePlanner       Routing über Wasser (Raster, A*, Begradigung)
 │   ├── PassagePlanner     Törnplanung (Polare, Kreuzen, Zeitfenster, Sonne)
+│   ├── Currents           Strömung (Flüsse, Stromstationen, Seevorhersage), Wasserstand, Pegel
 │   ├── SailPlan           Segelplan: Schläge, Wenden, Segelführung, Trimm
 │   ├── Polar              Polardaten (Formate, Interpolation, VMG)
 │   ├── WeatherModels      Modellvorhersagen entlang der Route (Open-Meteo)
@@ -760,6 +890,8 @@ qt/
 │   ├── BoatPages          Lichtszenen-Editor, Automationen
 │   ├── SupplyPages        Reichweite, Proviant, Proviant prüfen
 │   ├── LogView            Ansicht „Log“: Etappen (Karte, Diagramme), Logbuch
+│   ├── RadarView          Ansicht „Radar“, Radar-Overlay auf der Karte
+│   ├── SonarView          Ansicht „Sonar“: Echogramm
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

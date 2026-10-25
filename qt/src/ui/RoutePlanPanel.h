@@ -31,6 +31,13 @@ struct Place {
 };
 
 /** Dashed preview of the calculated route. */
+/** Current along the planned route, at the time the boat passes. */
+struct CurrentArrow {
+  QPointF pos;  // lon, lat
+  double setDeg = 0, driftKn = 0;
+  bool favourable = true;  // with the course
+};
+
 class PlannedRouteLayer : public MapLayer {
   Q_OBJECT
 public:
@@ -43,6 +50,7 @@ public:
     m_modes.clear();
     m_track.clear();
     m_events.clear();
+    m_currents.clear();
     emit changed();
   }
   /** Boards (zig-zag) with tack, gybe and sail change markers. */
@@ -52,6 +60,12 @@ public:
     m_events = events;
     emit changed();
   }
+  /** Current arrows (green with the course, red against it). */
+  void setCurrents(const QVector<CurrentArrow>& arrows) {
+    m_currents = arrows;
+    emit changed();
+  }
+  const QVector<CurrentArrow>& currents() const { return m_currents; }
   /** PassageLeg::Mode per leg, for coloring. */
   void setLegModes(const QVector<int>& modes) {
     m_modes = modes;
@@ -63,6 +77,7 @@ private:
   QVector<int> m_modes;
   QVector<QPointF> m_track;
   QVector<SailEvent> m_events;
+  QVector<CurrentArrow> m_currents;
 };
 
 /** Search field with suggestions for a Place. */

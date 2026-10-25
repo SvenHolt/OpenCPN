@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QPointF>
 #include <QVector>
+#include <limits>
 #include <memory>
 
 struct TideStation {
@@ -20,6 +21,10 @@ struct TideStation {
   // Offsets of subordinate stations (minutes / factors / station units)
   double highTimeOffMin = 0, lowTimeOffMin = 0;
   double highMpy = 1, lowMpy = 1, highOff = 0, lowOff = 0;
+  // Current stations: directions (deg true, towards) of flood and ebb;
+  // NaN when the data has none (reference current stations).
+  double floodDir = std::numeric_limits<double>::quiet_NaN();
+  double ebbDir = std::numeric_limits<double>::quiet_NaN();
 };
 
 struct HarmonicStation {

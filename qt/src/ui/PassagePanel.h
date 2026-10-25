@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QWidget>
 
+#include "core/Currents.h"
 #include "core/PassagePlanner.h"
 #include "core/SailPlan.h"
 #include "core/WeatherModels.h"
@@ -82,6 +83,7 @@ public:
   explicit PassagePanel(QWidget* parent = nullptr);
   /** Route as x = lon, y = lat; an empty route hides the panel. */
   void setRoute(const QVector<QPointF>& route);
+  const QVector<QPointF>& route() const { return m_route; }
   const PassagePlan& plan() const { return m_plan; }
   /** Boards, tacks, gybes and sail changes of the shown departure. */
   const SailingPlan& sailingPlan() const { return m_sail; }
@@ -100,6 +102,11 @@ public:
   /** Fetches the model forecasts for the current route. */
   void fetchForecasts();
   QString source() const { return m_sourceId; }
+  /** Fetches the marine forecast, the rivers and the gauges of the route. */
+  void fetchCurrents();
+  /** Tides and currents used for the plan. */
+  const CurrentModel& currents() const { return m_currents; }
+  void setCurrents(const CurrentModel& m);
 
   /** Wind from the loaded GRIB file, interpolated in time. */
   static bool gribWind(double lat, double lon, const QDateTime& t, double& kn,
@@ -116,6 +123,9 @@ private:
   void showResults(const QVector<DepartureOption>& options);
   void showSailPlan();
   void saveSettings() const;
+  void showCurrents();
+  QString levelText(const QString& title, const QPointF& pos,
+                    const QDateTime& t, const QVector<Gauge>& gauges) const;
 
   QVector<QPointF> m_route;
   PassagePlan m_plan;
@@ -149,4 +159,17 @@ private:
   QLabel* m_sailSummary;
   QVBoxLayout* m_sailList;
   class QPushButton* m_applySails;
+
+  // Tides and currents
+  CurrentModel m_currents;
+  QVector<Gauge> m_gaugesFrom, m_gaugesTo;
+  QComboBox* m_currentMode;
+  QWidget* m_manualCurrent;
+  QSpinBox* m_currentSet;
+  QDoubleSpinBox* m_currentDrift;
+  QLabel* m_currentInfo;
+  QVBoxLayout* m_riverList;
+  QDoubleSpinBox* m_minDepLevel;
+  QDoubleSpinBox* m_minArrLevel;
+  QLabel* m_levelInfo;
 };

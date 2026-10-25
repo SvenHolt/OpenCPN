@@ -67,7 +67,9 @@ struct SailBoard {
   int leg = 0;       // route leg (0 = first)
   QPointF from, to;  // lon, lat
   QDateTime start, end;
-  double headingDeg = 0, distanceNm = 0, speedKn = 0;
+  double headingDeg = 0, distanceNm = 0, speedKn = 0;  // distance over ground
+  double sogKn = 0, cogDeg = 0;  // over ground (current included)
+  double currentSetDeg = 0, currentDriftKn = 0;
   double tws = 0, twd = 0;
   double twa = 0;  // signed, + = wind from starboard
   bool motor = false;
@@ -99,6 +101,7 @@ struct SailingPlan {
   QVector<SailEvent> events;
   QVector<QPointF> track;  // lon, lat: start, board ends
   int tacks = 0, gybes = 0, sailChanges = 0;
+  bool currentUsed = false;
   double sailedNm = 0, hours = 0, motorHours = 0;
   QDateTime departure, arrival;
   QStringList warnings;
@@ -115,5 +118,6 @@ namespace SailPlanner {
  *  with a water test, off land. */
 SailingPlan plan(const QVector<QPointF>& route, const PassageSettings& s,
                  const WindSource& wind, const SailInventory& inv,
-                 double corridorNm = 1.0, const WaterTest& water = {});
+                 double corridorNm = 1.0, const WaterTest& water = {},
+                 const CurrentSource& current = {});
 }  // namespace SailPlanner

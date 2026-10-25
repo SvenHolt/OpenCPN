@@ -229,8 +229,13 @@ void SimulatorConnection::simulateBoat(QByteArray& out) {
           (awa > 0 ? -1 : 1) +
       (rng->generateDouble() - 0.5) * 1.5;
   line(QStringLiteral("IIXDR,A,%1,D,ROLL").arg(heel, 0, 'f', 1));
+  // A sloping bottom with small ridges.
   line(QStringLiteral("SDDPT,%1,0.5")
-           .arg(14 + 6 * std::sin(m_tick / 60.0), 0, 'f', 1));
+           .arg(14 + 6 * std::sin(m_tick / 60.0) +
+                    1.2 * std::sin(m_tick / 7.0) * std::sin(m_tick / 23.0),
+                0, 'f', 1));
+  line(QStringLiteral("YXMTW,%1,C")
+           .arg(16.5 + 0.4 * std::sin(m_tick / 300.0), 0, 'f', 1));
   line(QStringLiteral("ERRPM,E,1,%1,,A").arg(m_rpm, 0, 'f', 0));
   line(QStringLiteral("ERXDR,C,%1,C,ENGINE#0,P,%2,B,ENGOIL#0,V,%3,P,FUEL#0,"
                       "U,%4,V,BATTERY#0,G,%5,H,ENGINEHOURS#0")
