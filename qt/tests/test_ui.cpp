@@ -175,9 +175,7 @@ private slots:
                             20000));
     // Wind from ahead: the sail plan beats with tacks.
     auto* passage = panel->findChild<PassagePanel*>();
-    QSpinBox* windDir = nullptr;
-    for (auto* sb : passage->findChildren<QSpinBox*>())
-      if (sb->suffix() == QStringLiteral("°")) windDir = sb;
+    auto* windDir = passage->findChild<QSpinBox*>("windDir");
     QVERIFY(windDir);
     const int oldDir = windDir->value();
     windDir->setValue(30);
@@ -265,6 +263,70 @@ private slots:
     const QJsonObject state = passage->saveState();
     QCOMPARE(state.value("source").toString(), QStringLiteral("icon_seamless"));
     passage->restoreState(state);
+    passage->setRoute({});
+  }
+
+  void passageWithCurrent() {
+    auto* passage = m_win->findChild<PassagePanel*>();
+    QVERIFY(passage);
+    passage->setRoute({{10.0, 54.0}, {10.0, 54.2}});
+    QTest::qWait(300);
+    auto* mode = passage->findChild<QComboBox*>("currentMode");
+    auto* set = passage->findChild<QSpinBox*>("currentSet");
+    auto* drift = passage->findChild<QDoubleSpinBox*>("currentDrift");
+    QVERIFY(mode && set && drift);
+    const int oldMode = mode->currentIndex();
+    mode->setCurrentIndex(2);  // off
+    QTest::qWait(300);
+    const double still = passage->plan().hours;
+    QVERIFY(!passage->plan().currentUsed);
+    // Manual: 2 kn with the course (north).
+    mode->setCurrentIndex(1);
+    set->setValue(0);
+    drift->setValue(2.0);
+    QTest::qWait(300);
+    QVERIFY(passage->plan().currentUsed);
+    QVERIFY(passage->plan().hours < still);
+    QVERIFY(passage->plan().currentGainH > 0);
+    QVERIFY(!passage->findChild<QLabel*>("currentInfo")->text().isEmpty());
+    // Arrows on the chart along the route, with the course.
+    auto* layer = m_win->findChild<PlannedRouteLayer*>();
+    QVERIFY(layer);
+    QVERIFY(!layer->currents().isEmpty());
+    QVERIFY(layer->currents().first().favourable);
+    // Against the course: slower.
+    set->setValue(180);
+    QTest::qWait(300);
+    QVERIFY(passage->plan().hours > still);
+    QVERIFY(!layer->currents().first().favourable);
+    // Stored with the voyage.
+    const QJsonObject state = passage->saveState();
+    QCOMPARE(state["currents"].toObject()["mode"].toInt(), 1);
+    QCOMPARE(state["currents"].toObject()["set"].toInt(), 180);
+    if (const QString shot = qEnvironmentVariable("OCPN_QT_TEST_CURRENTS_SHOT");
+        !shot.isEmpty()) {
+      // A tidal stream across the Fehmarnbelt route, turning on the way.
+      const QVector<QPointF> route = {
+          {11.05, 54.2}, {11.2, 54.45}, {11.1, 54.65}};
+      layer->setPoints(route);
+      passage->setRoute(route);
+      set->setValue(250);
+      drift->setValue(1.4);
+      QTest::qWait(400);
+      m_win->chart()->fitGeoBounds(54.15, 10.9, 54.7, 11.35);
+      m_win->drawer()->open(m_win->pageIndex("routes"));
+      QTest::qWait(400);
+      auto* info = passage->findChild<QLabel*>("levelInfo");
+      for (QWidget* w = info->parentWidget(); w; w = w->parentWidget())
+        if (auto* sa = qobject_cast<QScrollArea*>(w)) {
+          sa->ensureWidgetVisible(info, 0, 330);
+          break;
+        }
+      QTest::qWait(200);
+      m_win->grab().save(shot);
+      layer->setPoints({});
+    }
+    mode->setCurrentIndex(oldMode);
     passage->setRoute({});
   }
 

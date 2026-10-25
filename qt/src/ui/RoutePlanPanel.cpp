@@ -128,6 +128,32 @@ void PlannedRouteLayer::paint(QPainter& p, const ChartView& view) {
       p.drawRect(QRectF(c - QPointF(4.5, 4.5), QSizeF(9, 9)));
     }
   }
+  // Current arrows: length grows with the drift.
+  for (const CurrentArrow& a : m_currents) {
+    if (a.driftKn < 0.1) continue;
+    const QPointF c = view.screenPos(a.pos.y(), a.pos.x());
+    const double len = 10 + std::min(a.driftKn, 4.0) * 8;
+    // Screen angle of the set (north up, rotated chart included).
+    const QPointF ahead = view.screenPos(
+        a.pos.y() + 0.01 * std::cos(a.setDeg * M_PI / 180),
+        a.pos.x() + 0.01 * std::sin(a.setDeg * M_PI / 180) /
+                        std::max(0.1, std::cos(a.pos.y() * M_PI / 180)));
+    QPointF dir = ahead - c;
+    const double n = std::hypot(dir.x(), dir.y());
+    if (n < 1e-6) continue;
+    dir /= n;
+    const QPointF tip = c + dir * (len / 2), tail = c - dir * (len / 2);
+    const QPointF side(-dir.y(), dir.x());
+    const QColor col = a.favourable ? pal.success : pal.danger;
+    p.setPen(QPen(QColor(0, 0, 0, 120), 4, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(tail, tip);
+    p.setPen(QPen(col, 2.2, Qt::SolidLine, Qt::RoundCap));
+    p.drawLine(tail, tip);
+    p.setPen(Qt::NoPen);
+    p.setBrush(col);
+    p.drawPolygon(QPolygonF(
+        {tip + dir * 3, tip - dir * 5 + side * 4, tip - dir * 5 - side * 4}));
+  }
   for (int i = 0; i < line.size(); ++i) {
     const bool end = i == 0 || i == line.size() - 1;
     p.setPen(QPen(Qt::white, 2));
@@ -465,6 +491,31 @@ RoutePlanPanel::RoutePlanPanel(ChartView* chart, QWidget* parent)
     m_layer->setLegModes(modes);
     const SailingPlan& sp = m_passage->sailingPlan();
     m_layer->setSailing(sp.track, sp.events);
+    // Current where and when the boat passes, a few arrows per leg.
+    QVector<CurrentArrow> arrows;
+    const PassagePlan& plan = m_passage->plan();
+    const CurrentModel& model = m_passage->currents();
+    const QVector<QPointF>& pts = m_passage->route();
+    if (model.mode != CurrentModel::Mode::Off && plan.currentUsed)
+      for (const PassageLeg& leg : plan.legs) {
+        if (leg.index + 1 >= pts.size()) break;
+        const QPointF a = pts[leg.index], b = pts[leg.index + 1];
+        const int n = std::clamp(int(leg.distanceNm / 3), 1, 6);
+        const qint64 secs = leg.start.secsTo(leg.end);
+        for (int k = 0; k < n; ++k) {
+          const double f = (k + 0.5) / n;
+          CurrentArrow arrow;
+          arrow.pos = a + (b - a) * f;
+          if (!model.current(arrow.pos.y(), arrow.pos.x(),
+                             leg.start.addSecs(qint64(secs * f)), arrow.setDeg,
+                             arrow.driftKn))
+            continue;
+          arrow.favourable =
+              std::cos((arrow.setDeg - leg.courseDeg) * M_PI / 180) >= 0;
+          arrows << arrow;
+        }
+      }
+    m_layer->setCurrents(arrows);
   });
   l->addWidget(m_passage);
   l->addWidget(m_actionsBox);
@@ -736,11 +787,12 @@ void RoutePlanPanel::openVoyage(const Voyage& v) {
   if (!v.gribFile.isEmpty() && !GribManager::instance().file())
     GribManager::instance().open(VoyageStore::instance().folder(v.id) + "/" +
                                  v.gribFile);
-  m_passage->restoreState(v.settings);
   // Fresh forecasts when online (setRoute loads them), the stored ones
-  // otherwise or until they arrive.
+  // otherwise or until they arrive. The inputs and the stored currents
+  // after the route, which resets them.
   m_passage->setWaterTest(waterTest(v.route));
   m_passage->setRoute(v.route);
+  m_passage->restoreState(v.settings);
   if (!v.forecasts.isEmpty()) m_passage->setForecasts(v.forecasts, true);
   double s = 90, w = 180, n = -90, e = -180;
   for (const QPointF& p : v.route) {

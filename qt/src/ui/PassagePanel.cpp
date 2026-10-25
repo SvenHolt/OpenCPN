@@ -4,6 +4,7 @@
 #include <QComboBox>
 #include <QDateTimeEdit>
 #include <QDoubleSpinBox>
+#include <QJsonArray>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -23,6 +24,7 @@
 #include "core/Grib.h"
 #include "core/NavStore.h"
 #include "core/Polar.h"
+#include "core/Tides.h"
 #include "core/osm/OnlineOsm.h"
 #include "ui/DrawerPages.h"
 #include "ui/Icons.h"
@@ -341,6 +343,7 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
   auto* windRow = new QHBoxLayout;
   windRow->addWidget(label(tr("Wind from"), "dim"));
   m_windDir = new QSpinBox;
+  m_windDir->setObjectName("windDir");
   m_windDir->setRange(0, 359);
   m_windDir->setWrapping(true);
   m_windDir->setSuffix(QStringLiteral("°"));
@@ -382,6 +385,91 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
             m_chosen = d;
             recalculate();
           });
+
+  // Tides and currents: rivers, tidal streams, marine forecast, levels.
+  auto* tideHead = new QHBoxLayout;
+  tideHead->addWidget(label(tr("TIDES & CURRENTS"), "section"), 1);
+  auto* loadTides = new QPushButton(tr("Load"));
+  loadTides->setProperty("role", "ghost");
+  loadTides->setIcon(Icons::icon("refresh", Theme::p().textDim, 16));
+  loadTides->setToolTip(
+      tr("Load the current and sea level forecast (Open-Meteo), the rivers "
+         "and canals (OpenStreetMap) and the gauges (PEGELONLINE)"));
+  loadTides->setCursor(Qt::PointingHandCursor);
+  connect(loadTides, &QPushButton::clicked, this, &PassagePanel::fetchCurrents);
+  tideHead->addWidget(loadTides);
+  l->addLayout(tideHead);
+  auto* curRow = new QHBoxLayout;
+  curRow->setSpacing(6);
+  curRow->addWidget(label(tr("Current"), "dim"));
+  m_currentMode = new QComboBox;
+  m_currentMode->setObjectName("currentMode");
+  m_currentMode->addItem(tr("Automatic"));
+  m_currentMode->addItem(tr("Manual"));
+  m_currentMode->addItem(tr("Off"));
+  m_currentMode->setCurrentIndex(set.value("currentMode", 0).toInt());
+  curRow->addWidget(m_currentMode, 1);
+  m_manualCurrent = new QWidget;
+  auto* man = new QHBoxLayout(m_manualCurrent);
+  man->setContentsMargins(0, 0, 0, 0);
+  man->setSpacing(6);
+  man->addWidget(label(tr("to"), "dim"));
+  m_currentSet = new QSpinBox;
+  m_currentSet->setObjectName("currentSet");
+  m_currentSet->setRange(0, 359);
+  m_currentSet->setWrapping(true);
+  m_currentSet->setSuffix(QStringLiteral("°"));
+  m_currentSet->setValue(set.value("currentSet", 90).toInt());
+  m_currentSet->setToolTip(tr("Set: the direction the current flows to"));
+  man->addWidget(m_currentSet, 1);
+  m_currentDrift = new QDoubleSpinBox;
+  m_currentDrift->setObjectName("currentDrift");
+  m_currentDrift->setRange(0, 10);
+  m_currentDrift->setDecimals(1);
+  m_currentDrift->setSingleStep(0.1);
+  m_currentDrift->setSuffix(tr(" kn"));
+  m_currentDrift->setValue(set.value("currentDrift", 1.0).toDouble());
+  man->addWidget(m_currentDrift, 1);
+  curRow->addWidget(m_manualCurrent, 2);
+  l->addLayout(curRow);
+  m_currentInfo = label(QString(), "dim");
+  m_currentInfo->setObjectName("currentInfo");
+  m_currentInfo->setWordWrap(true);
+  l->addWidget(m_currentInfo);
+  m_riverList = new QVBoxLayout;
+  m_riverList->setSpacing(4);
+  l->addLayout(m_riverList);
+  auto* levels = new QGridLayout;
+  levels->setHorizontalSpacing(8);
+  const auto levelSpin = [&](const char* key) {
+    auto* sp = new QDoubleSpinBox;
+    sp->setRange(-1, 15);
+    sp->setDecimals(1);
+    sp->setSingleStep(0.1);
+    sp->setSuffix(tr(" m"));
+    sp->setSpecialValueText(tr("any"));
+    sp->setValue(set.value(key, -1.0).toDouble());
+    sp->setToolTip(
+        tr("Minimum water level (above chart datum) for a tidal harbour, a "
+           "bar or a bridge; the departure window avoids lower water"));
+    return sp;
+  };
+  levels->addWidget(label(tr("Min. level"), "dim"), 0, 0);
+  m_minDepLevel = levelSpin("minDepLevel");
+  m_minDepLevel->setObjectName("minDepLevel");
+  levels->addWidget(m_minDepLevel, 0, 1);
+  levels->addWidget(label(tr("at departure"), "dim"), 0, 2);
+  m_minArrLevel = levelSpin("minArrLevel");
+  m_minArrLevel->setObjectName("minArrLevel");
+  levels->addWidget(m_minArrLevel, 1, 1);
+  levels->addWidget(label(tr("at arrival"), "dim"), 1, 2);
+  levels->setColumnStretch(2, 1);
+  l->addLayout(levels);
+  m_levelInfo = label(QString(), "dim");
+  m_levelInfo->setObjectName("levelInfo");
+  m_levelInfo->setTextFormat(Qt::RichText);
+  m_levelInfo->setWordWrap(true);
+  l->addWidget(m_levelInfo);
 
   // Results
   m_results = new QWidget;
@@ -449,6 +537,10 @@ PassagePanel::PassagePanel(QWidget* parent) : QWidget(parent) {
     connect(s, &QDoubleSpinBox::valueChanged, this, changed);
   connect(m_windDir, &QSpinBox::valueChanged, this, changed);
   connect(m_lane, &QDoubleSpinBox::valueChanged, this, changed);
+  connect(m_currentMode, &QComboBox::currentIndexChanged, this, changed);
+  connect(m_currentSet, &QSpinBox::valueChanged, this, changed);
+  for (auto* s : {m_currentDrift, m_minDepLevel, m_minArrLevel})
+    connect(s, &QDoubleSpinBox::valueChanged, this, changed);
   connect(m_timeline, &DepartureTimeline::departureChosen, this,
           [this](const QDateTime& d) {
             m_chosen = d;
@@ -549,6 +641,18 @@ void PassagePanel::showSailPlan() {
     head->setWordWrap(true);
     head->setAttribute(Qt::WA_TransparentForMouseEvents);
     rl->addWidget(head);
+    if (sp.currentUsed && b.currentDriftKn >= 0.05) {
+      auto* cur =
+          label(tr("Current to %1° %2 kn · over ground %3° %4 kn")
+                    .arg(int(std::round(b.currentSetDeg)) % 360)
+                    .arg(b.currentDriftKn, 0, 'f', 1)
+                    .arg(int(std::round(b.cogDeg)) % 360, 3, 10, QChar('0'))
+                    .arg(b.sogKn, 0, 'f', 1),
+                "dim");
+      cur->setObjectName("boardCurrent");
+      cur->setAttribute(Qt::WA_TransparentForMouseEvents);
+      rl->addWidget(cur);
+    }
     auto* trim = label(QString(), "dim");
     trim->setObjectName("trim");
     trim->setWordWrap(true);
@@ -588,6 +692,17 @@ PassageSettings PassagePanel::settings() const {
   s.downwindSail = boat.sails().downwind != SailConfig::Downwind::None;
   s.manualWindFromDeg = m_windDir->value();
   s.manualWindKn = m_windKn->value();
+  const CurrentModel model = m_currents;
+  s.levelAt = [model](double lat, double lon, const QDateTime& t) {
+    return model.level(lat, lon, t).levelM;
+  };
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  s.minDepartureLevelM = m_minDepLevel->value() > m_minDepLevel->minimum()
+                             ? m_minDepLevel->value()
+                             : nan;
+  s.minArrivalLevelM = m_minArrLevel->value() > m_minArrLevel->minimum()
+                           ? m_minArrLevel->value()
+                           : nan;
   return s;
 }
 
@@ -601,6 +716,11 @@ void PassagePanel::saveSettings() const {
   set.setValue("laneNm", m_lane->value());
   set.setValue("windFrom", m_windDir->value());
   set.setValue("windKn", m_windKn->value());
+  set.setValue("currentMode", m_currentMode->currentIndex());
+  set.setValue("currentSet", m_currentSet->value());
+  set.setValue("currentDrift", m_currentDrift->value());
+  set.setValue("minDepLevel", m_minDepLevel->value());
+  set.setValue("minArrLevel", m_minArrLevel->value());
 }
 
 void PassagePanel::setRoute(const QVector<QPointF>& route) {
@@ -613,8 +733,14 @@ void PassagePanel::setRoute(const QVector<QPointF>& route) {
     // New route: forecasts of the old one no longer apply. Load them for
     // the initial planning while online.
     m_forecasts.clear();
-    if (OnlineOsm::instance().isEnabled() && OnlineOsm::instance().isOnline())
+    m_currents.marine = {};
+    m_currents.rivers = {};
+    m_gaugesFrom.clear();
+    m_gaugesTo.clear();
+    if (OnlineOsm::instance().isEnabled() && OnlineOsm::instance().isOnline()) {
       fetchForecasts();
+      fetchCurrents();
+    }
   }
   recalculate();
 }
@@ -650,6 +776,11 @@ void PassagePanel::recalculate() {
   ids << "manual";
   if (!ids.contains(m_sourceId)) m_sourceId = ids.first();
 
+  m_currents.mode = CurrentModel::Mode(m_currentMode->currentIndex());
+  m_currents.manualSetDeg = m_currentSet->value();
+  m_currents.manualDriftKn = m_currentDrift->value();
+  m_manualCurrent->setVisible(m_currents.mode == CurrentModel::Mode::Manual);
+  const CurrentSource current = m_currents.source();
   const PassageSettings s = settings();
   QVector<SourceResult> rows;
   QVector<DepartureOption> selectedOptions;
@@ -657,7 +788,8 @@ void PassagePanel::recalculate() {
     SourceResult r;
     r.id = id;
     r.name = sourceName(id);
-    r.best = PassagePlanner::planWindow(m_route, s, windFor(id), &r.options);
+    r.best = PassagePlanner::planWindow(m_route, s, windFor(id), &r.options,
+                                        current);
     // A source that leaves gaps (manual wind used) is shown dimmed.
     r.usable = id == "manual" || !r.best.manualUsed;
     if (id == m_sourceId) {
@@ -670,7 +802,7 @@ void PassagePanel::recalculate() {
     PassageSettings one = s;
     one.departure = m_chosen;
     one.latestDeparture = {};
-    m_plan = PassagePlanner::plan(m_route, one, windFor(m_sourceId));
+    m_plan = PassagePlanner::plan(m_route, one, windFor(m_sourceId), current);
   }
   m_matrix->setResults(rows, m_sourceId, m_plan.departure);
 
@@ -682,7 +814,8 @@ void PassagePanel::recalculate() {
     PassageSettings one = s;
     one.departure = m_plan.departure;
     one.latestDeparture = {};
-    const PassagePlan p = PassagePlanner::plan(m_route, one, windFor(r.id));
+    const PassagePlan p =
+        PassagePlanner::plan(m_route, one, windFor(r.id), current);
     minH = std::min(minH, p.hours);
     maxH = std::max(maxH, p.hours);
     ++models;
@@ -714,7 +847,7 @@ void PassagePanel::recalculate() {
   one.departure = m_plan.departure;
   one.latestDeparture = {};
   m_sail = SailPlanner::plan(m_route, one, windFor(m_sourceId),
-                             SailInventory::load(), laneNm(), m_water);
+                             SailInventory::load(), laneNm(), m_water, current);
   // The tacks and gybes of the sail plan are the ones to count.
   m_plan.tacks = m_plan.gybes = 0;
   for (PassageLeg& leg : m_plan.legs) leg.tacks = leg.gybes = 0;
@@ -734,6 +867,7 @@ void PassagePanel::recalculate() {
   }
   showResults(selectedOptions);
   showSailPlan();
+  showCurrents();
   // The matrix shows the departures of all sources; the bar timeline is
   // only needed without models.
   m_timeline->setVisible(rows.size() == 1 && selectedOptions.size() > 1);
@@ -781,7 +915,24 @@ QJsonObject PassagePanel::saveState() const {
       {"windFrom", m_windDir->value()},
       {"windKn", m_windKn->value()},
       {"source", m_sourceId},
-      {"chosen", m_chosen.toUTC().toString(Qt::ISODate)}};
+      {"chosen", m_chosen.toUTC().toString(Qt::ISODate)},
+      {"currents", [this] {
+         QJsonObject c{{"mode", m_currentMode->currentIndex()},
+                       {"set", m_currentSet->value()},
+                       {"drift", m_currentDrift->value()},
+                       {"minDep", m_minDepLevel->value()},
+                       {"minArr", m_minArrLevel->value()}};
+         if (m_currents.marine.isValid())
+           c["marine"] = m_currents.marine.toJson();
+         if (!m_currents.rivers.isEmpty())
+           c["rivers"] = m_currents.rivers.toJson();
+         QJsonArray from, to;
+         for (const Gauge& g : m_gaugesFrom) from.append(g.toJson());
+         for (const Gauge& g : m_gaugesTo) to.append(g.toJson());
+         c["gaugesFrom"] = from;
+         c["gaugesTo"] = to;
+         return c;
+       }()}};
 }
 
 void PassagePanel::restoreState(const QJsonObject& o) {
@@ -798,7 +949,201 @@ void PassagePanel::restoreState(const QJsonObject& o) {
   m_windKn->setValue(o.value("windKn").toDouble(m_windKn->value()));
   m_sourceId = o.value("source").toString(m_sourceId);
   m_chosen = QDateTime::fromString(o.value("chosen").toString(), Qt::ISODate);
+  const QJsonObject c = o.value("currents").toObject();
+  if (!c.isEmpty()) {
+    m_currentMode->setCurrentIndex(c.value("mode").toInt(0));
+    m_currentSet->setValue(c.value("set").toInt(m_currentSet->value()));
+    m_currentDrift->setValue(
+        c.value("drift").toDouble(m_currentDrift->value()));
+    m_minDepLevel->setValue(c.value("minDep").toDouble(-1));
+    m_minArrLevel->setValue(c.value("minArr").toDouble(-1));
+    m_currents.marine = MarineForecast::fromJson(c.value("marine").toObject());
+    m_currents.rivers = RiverNetwork::fromJson(c.value("rivers").toObject());
+    m_gaugesFrom.clear();
+    m_gaugesTo.clear();
+    for (const auto& v : c.value("gaugesFrom").toArray())
+      m_gaugesFrom << Gauge::fromJson(v.toObject());
+    for (const auto& v : c.value("gaugesTo").toArray())
+      m_gaugesTo << Gauge::fromJson(v.toObject());
+  }
   m_debounce.start();
+}
+
+void PassagePanel::setCurrents(const CurrentModel& m) {
+  m_currents.marine = m.marine;
+  m_currents.rivers = m.rivers;
+  m_currents.useStations = m.useStations;
+  m_currentMode->setCurrentIndex(int(m.mode));
+  m_currentSet->setValue(int(std::round(m.manualSetDeg)) % 360);
+  m_currentDrift->setValue(m.manualDriftKn);
+  m_debounce.start();
+}
+
+void PassagePanel::fetchCurrents() {
+  if (m_route.size() < 2) return;
+  m_currentInfo->setText(tr("Loading currents, rivers and gauges…"));
+  QPointer<PassagePanel> self(this);
+  const QVector<QPointF> route = m_route;
+  TideServices::instance().fetchMarine(
+      WeatherModels::samplePoints(route, 4),
+      [self, route](const MarineForecast& m, const QString& err) {
+        if (!self || self->m_route != route) return;
+        if (!m.isValid() && !err.isEmpty())
+          qInfo("Marine forecast not available: %s", qPrintable(err));
+        self->m_currents.marine = m;
+        self->m_debounce.start();
+      });
+  // Rivers and canals along the route (only for passages of moderate size;
+  // at sea the box holds no waterways anyway).
+  GeoBox box{1e9, 1e9, -1e9, -1e9};
+  for (const QPointF& p : route) {
+    box.south = std::min(box.south, p.y());
+    box.north = std::max(box.north, p.y());
+    box.west = std::min(box.west, p.x());
+    box.east = std::max(box.east, p.x());
+  }
+  box.south -= 0.03;
+  box.north += 0.03;
+  box.west -= 0.05;
+  box.east += 0.05;
+  if (box.areaDeg2() <= 2.0) {
+    OnlineOsm::instance().queryArea(
+        box, RiverNetwork::query(box.south, box.west, box.north, box.east),
+        [self, route](const QByteArray& json, const QString& err) {
+          if (!self || self->m_route != route || !err.isEmpty()) return;
+          // Keep the speeds the skipper set for rivers of the same name.
+          RiverNetwork net =
+              RiverNetwork::fromOsm(OverpassService::parseJson(json));
+          for (const auto& [name, kn] : self->m_currents.rivers.summary())
+            net.setSpeed(name, kn);
+          self->m_currents.rivers = net;
+          self->m_debounce.start();
+        });
+  }
+  // Inland gauges near departure and destination.
+  for (const bool from : {true, false}) {
+    const QPointF p = from ? route.first() : route.last();
+    TideServices::instance().fetchGauges(
+        p.y(), p.x(), 25,
+        [self, route, from](const QVector<Gauge>& g, const QString&) {
+          if (!self || self->m_route != route) return;
+          (from ? self->m_gaugesFrom : self->m_gaugesTo) = g.mid(0, 2);
+          self->m_debounce.start();
+        });
+  }
+}
+
+QString PassagePanel::levelText(const QString& title, const QPointF& pos,
+                                const QDateTime& t,
+                                const QVector<Gauge>& gauges) const {
+  const Palette& pal = Theme::p();
+  QString out =
+      QStringLiteral("<b>%1</b> %2").arg(title.toHtmlEscaped(), timeText(t));
+  const LevelInfo li = m_currents.level(pos.y(), pos.x(), t);
+  if (li.valid()) {
+    out += " · " + (li.chartDatum ? tr("%1 m above chart datum")
+                                  : tr("%1 m against mean sea level"))
+                       .arg(li.levelM, 0, 'f', 1);
+    out += QStringLiteral(" <span style='color:%1'>(%2)</span>")
+               .arg(pal.textDim.name(), li.source.toHtmlEscaped());
+    QStringList ex;
+    for (const TideExtreme& e : li.extremes)
+      ex << QStringLiteral("%1 %2 %3 m")
+                .arg(e.high ? tr("HW") : tr("LW"),
+                     e.time.toLocalTime().toString("HH:mm"))
+                .arg(e.value, 0, 'f', 1);
+    if (!ex.isEmpty()) out += "<br>" + ex.join(" · ");
+  }
+  for (const Gauge& g : gauges)
+    out += QStringLiteral("<br>%1 %2: %3")
+               .arg(tr("Gauge"), g.name.toHtmlEscaped(), g.text());
+  if (!li.valid() && gauges.isEmpty()) out += " · " + tr("no water level data");
+  return out;
+}
+
+void PassagePanel::showCurrents() {
+  const Palette& pal = Theme::p();
+  QStringList src;
+  if (m_currents.mode == CurrentModel::Mode::Off) {
+    src << tr("Currents are not taken into account.");
+  } else if (m_currents.mode == CurrentModel::Mode::Manual) {
+    src << tr("Constant current to %1° with %2 kn.")
+               .arg(m_currentSet->value())
+               .arg(m_currentDrift->value(), 0, 'f', 1);
+  } else {
+    int river = 0, canal = 0;
+    for (const Waterway& w : m_currents.rivers.ways())
+      (w.kind == "canal" ? canal : river) += w.kind == "tidal" ? 0 : 1;
+    if (river || canal)
+      src << tr("%1 river and %2 canal sections (OpenStreetMap)")
+                 .arg(river)
+                 .arg(canal);
+    if (TideDatabase::instance().isLoaded())
+      src << tr("tidal current stations");
+    if (m_currents.marine.isValid())
+      src << tr("marine forecast of %1")
+                 .arg(
+                     QLocale().toString(m_currents.marine.fetched.toLocalTime(),
+                                        QLocale::ShortFormat));
+    QString text = src.isEmpty() ? tr("No current data loaded yet.")
+                                 : tr("Sources: %1").arg(src.join(", "));
+    if (m_plan.currentUsed)
+      text += "\n" + (m_plan.currentGainH >= 0
+                          ? tr("The current saves %1 (max. %2 kn).")
+                          : tr("The current costs %1 (max. %2 kn)."))
+                         .arg(hoursText(std::abs(m_plan.currentGainH)))
+                         .arg(m_plan.maxCurrentKn, 0, 'f', 1);
+    src = {text};
+  }
+  m_currentInfo->setText(src.join(" "));
+
+  // Rivers with their speed, changeable.
+  while (QLayoutItem* it = m_riverList->takeAt(0)) {
+    if (QWidget* w = it->widget()) {
+      w->hide();
+      w->deleteLater();
+    }
+    delete it;
+  }
+  if (m_currents.mode == CurrentModel::Mode::Auto) {
+    int n = 0;
+    for (const auto& [name, kn] : m_currents.rivers.summary()) {
+      if (++n > 8) break;
+      auto* row = new QWidget;
+      row->setObjectName("riverRow");
+      auto* rl = new QHBoxLayout(row);
+      rl->setContentsMargins(0, 0, 0, 0);
+      rl->addWidget(label("〰 " + name), 1);
+      auto* sp = new QDoubleSpinBox;
+      sp->setRange(0, 8);
+      sp->setDecimals(1);
+      sp->setSingleStep(0.1);
+      sp->setSuffix(tr(" kn"));
+      sp->setValue(kn);
+      sp->setToolTip(tr("Flow speed of this river (downstream)"));
+      const QString key = name;
+      connect(sp, &QDoubleSpinBox::editingFinished, this, [this, sp, key] {
+        m_currents.rivers.setSpeed(key, sp->value());
+        m_debounce.start();
+      });
+      rl->addWidget(sp);
+      m_riverList->addWidget(row);
+    }
+  }
+
+  // Water levels at departure and destination.
+  if (m_route.size() >= 2 && m_plan.departure.isValid()) {
+    QString t =
+        levelText(tr("Departure"), m_route.first(), m_plan.departure,
+                  m_gaugesFrom) +
+        "<br>" +
+        levelText(tr("Arrival"), m_route.last(), m_plan.arrival, m_gaugesTo);
+    if (!m_plan.levelOk)
+      t += QStringLiteral("<br><span style='color:%1'>⚠ %2</span>")
+               .arg(pal.warning.name(),
+                    tr("The minimum water level is not reached."));
+    m_levelInfo->setText(t);
+  }
 }
 
 void PassagePanel::showResults(const QVector<DepartureOption>& options) {
@@ -829,6 +1174,23 @@ void PassagePanel::showResults(const QVector<DepartureOption>& options) {
                ? tr("Diesel · %1 at night").arg(hoursText(p.nightHours))
                : tr("Diesel")),
       2, 1);
+  if (p.currentUsed) {
+    const int mins = int(std::round(p.currentGainH * 60));
+    m_tiles->addWidget(
+        tile(QStringLiteral("%1%2:%3 h")
+                 .arg(mins >= 0 ? "+" : "−")
+                 .arg(std::abs(mins) / 60)
+                 .arg(std::abs(mins) % 60, 2, 10, QChar('0')),
+             tr("Current · max. %1 kn").arg(p.maxCurrentKn, 0, 'f', 1),
+             mins >= 0 ? pal.success : pal.warning),
+        3, 0);
+    if (!std::isnan(p.arrivalLevelM))
+      m_tiles->addWidget(
+          tile(QStringLiteral("%1 m").arg(p.arrivalLevelM, 0, 'f', 1),
+               tr("Water level at arrival"),
+               p.levelOk ? QColor() : pal.warning),
+          3, 1);
+  }
 
   QStringList warn = p.warnings;
   const auto& boat = BoatConfig::instance();
@@ -860,6 +1222,12 @@ void PassagePanel::showResults(const QVector<DepartureOption>& options) {
     QString extra;
     if (leg.tacks) extra += tr(" · %n tack(s)", nullptr, leg.tacks);
     if (leg.gybes) extra += tr(" · %n gybe(s)", nullptr, leg.gybes);
+    QString cur;
+    if (p.currentUsed && leg.currentDriftKn >= 0.05)
+      cur = tr(" · current %1%2 kn · SOG %3 kn")
+                .arg(leg.currentAlongKn >= 0 ? "+" : "−")
+                .arg(std::abs(leg.currentAlongKn), 0, 'f', 1)
+                .arg(leg.sogKn, 0, 'f', 1);
     auto* row = new QLabel(
         QStringLiteral("<span style='color:%1'>●</span> <b>%2</b> &nbsp;%3° · "
                        "%4 · <span style='color:%1'>%5</span>%6<br>"
@@ -873,8 +1241,8 @@ void PassagePanel::showResults(const QVector<DepartureOption>& options) {
                  leg.end.toLocalTime().toString("HH:mm"))
             .arg(hoursText(leg.hours), compass(leg.windFromDeg))
             .arg(int(std::round(leg.windKn)))
-            .arg(
-                QStringLiteral(" · TWA %1°").arg(int(std::round(leg.twaDeg)))));
+            .arg(QStringLiteral(" · TWA %1°").arg(int(std::round(leg.twaDeg))) +
+                 cur));
     row->setTextFormat(Qt::RichText);
     row->setWordWrap(true);
     m_legs->addWidget(row);

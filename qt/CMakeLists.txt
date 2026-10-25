@@ -78,6 +78,7 @@ set(OCPN_QT_CORE_SOURCES
   src/core/RoutePlanner.cpp
   src/core/PassagePlanner.cpp
   src/core/SailPlan.cpp
+  src/core/Currents.cpp
   src/core/Translation.cpp
   src/core/Polar.cpp
   src/core/WeatherModels.cpp
@@ -269,6 +270,11 @@ if(OCPN_QT_BUILD_TESTS)
     add_executable(ocpnqt_sailplan_tests tests/test_sailplan.cpp)
     target_link_libraries(ocpnqt_sailplan_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_sailplan_tests COMMAND ocpnqt_sailplan_tests)
+    add_executable(ocpnqt_currents_tests tests/test_currents.cpp)
+    target_link_libraries(ocpnqt_currents_tests PRIVATE ocpnqt_core Qt6::Test)
+    target_compile_definitions(ocpnqt_currents_tests PRIVATE
+      OCPN_QT_SOURCE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
+    add_test(NAME ocpnqt_currents_tests COMMAND ocpnqt_currents_tests)
     add_executable(ocpnqt_legs_tests tests/test_legs.cpp)
     target_link_libraries(ocpnqt_legs_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_legs_tests COMMAND ocpnqt_legs_tests)

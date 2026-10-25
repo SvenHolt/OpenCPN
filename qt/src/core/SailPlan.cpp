@@ -314,7 +314,8 @@ QVector<SailEvent> SailingPlan::eventsOf(SailEvent::Kind k) const {
 SailingPlan SailPlanner::plan(const QVector<QPointF>& route,
                               const PassageSettings& s, const WindSource& wind,
                               const SailInventory& inv, double corridorNm,
-                              const WaterTest& water) {
+                              const WaterTest& water,
+                              const CurrentSource& current) {
   SailingPlan out;
   if (route.size() < 2) return out;
   out.departure = s.departure.toUTC();
@@ -366,6 +367,16 @@ SailingPlan SailPlanner::plan(const QVector<QPointF>& route,
       }
       const double brg = headingOf(D);
       const double twa = angleDiff(brg, from);
+      // Current here: as a vector (NM/h) and against the course line.
+      double cset = 0, cdrift = 0;
+      QPointF cv(0, 0);
+      if (current && current(here.y(), here.x(), t, cset, cdrift) &&
+          cdrift > 0) {
+        cv = unit(cset) * cdrift;
+        out.currentUsed = true;
+      }
+      const double alongC = QPointF::dotProduct(cv, unit(brg));
+      const double crossC = cross(cv, unit(brg));  // + = sets to starboard
       const double noGo = polar ? s.polar->bestUpwindTwa(kn) : s.noGoDeg;
       const double run = polar ? s.polar->bestDownwindTwa(kn) : s.runDeg;
       PassageLeg::Mode mode = PassageLeg::Mode::Sail;
@@ -387,20 +398,31 @@ SailingPlan SailPlanner::plan(const QVector<QPointF>& route,
         v = PassagePlanner::boatSpeed(s, kn, twa);
       }
       const double vmg = v > 0 ? dist / (sailed / v) : 0;
+      // Made good over ground: direct courses steer into the current, on
+      // boards its cross components cancel.
+      const double vmgGround =
+          v <= 0 ? 0
+          : mode == PassageLeg::Mode::Sail
+              ? PassagePlanner::groundSpeed(v, alongC, crossC)
+              : std::max(0.3, vmg + alongC);
+      const double motorGround =
+          PassagePlanner::groundSpeed(s.motorSpeedKn, alongC, crossC);
       bool motor = false;
       switch (s.strategy) {
         case PassageSettings::Strategy::Motor:
           motor = true;
           break;
         case PassageSettings::Strategy::MotorSail:
-          motor = vmg < s.motorSpeedKn || kn < s.minSailWindKn;
+          motor = vmgGround < motorGround || kn < s.minSailWindKn;
           break;
         case PassageSettings::Strategy::Sail:
-          motor = kn < s.minSailWindKn || vmg < s.minSailSpeedKn;
+          motor = kn < s.minSailWindKn || vmgGround < s.minSailSpeedKn;
           break;
       }
 
       double heading = brg, len = std::min(dist, kStepNm), speed = v;
+      double sog = v;
+      QPointF moveDir = unit(brg);  // over ground
       int side = 0;
       if (motor) {
         mode = PassageLeg::Mode::Motor;
@@ -423,11 +445,26 @@ SailingPlan SailPlanner::plan(const QVector<QPointF>& route,
         const auto headingFor = [&](int sd) {
           return sideOf(hPort) == sd ? hPort : hStbd;
         };
+        // Over ground: the boat speed on each tack plus the current.
         const QPointF uc = unit(headingFor(cur)), uo = unit(headingFor(-cur));
-        const double det = cross(uc, uo);
-        double a = cross(D, uo) / det, b = cross(uc, D) / det;
+        const QPointF gc = uc * v + cv, go = uo * v + cv;
+        const double gcn = std::hypot(gc.x(), gc.y());
+        const double gon = std::hypot(go.x(), go.y());
+        const double det = cross(gc, go);
+        double a = -1, b = -1;  // ground distances on this and the other tack
+        if (std::abs(det) > 1e-9 && gcn > 0.3) {
+          a = cross(D, go) / det * gcn;
+          b = cross(gc, D) / det * gon;
+        }
+        const QPointF ug = gcn > 0 ? gc / gcn : uc;
+        if (a < 0 && b < 0) {
+          // The current is too strong to make ground on boards.
+          a = 0;
+          b = 0;
+          switches = 4;
+        }
         // Lane around the rhumb line.
-        const double lr = cross(uc, dirAB), off = cross(P, dirAB);
+        const double lr = cross(ug, dirAB), off = cross(P, dirAB);
         double edge = 1e9;
         if (std::abs(lr) > 1e-6) {
           const double target = (lr > 0 ? 1 : -1) * corridorNm;
@@ -435,7 +472,7 @@ SailingPlan SailPlanner::plan(const QVector<QPointF>& route,
           if (edge < 0) edge = 0;
         }
         double boardLen = std::min({a, edge, kStepNm});
-        boardLen = clearNm(P, uc, boardLen);
+        boardLen = clearNm(P, ug, boardLen);
         if ((boardLen < kMinBoardNm && b > kMinBoardNm) || a <= 0.02) {
           // Tack (or gybe) here; give up after many changes in a row.
           if (++switches < 4) {
@@ -468,22 +505,39 @@ SailingPlan SailPlanner::plan(const QVector<QPointF>& route,
           heading = headingFor(cur);
           len = std::max(std::min(boardLen, a), 0.02);
           side = cur;
+          moveDir = ug;
+          sog = gcn;
         }
       }
       switches = 0;
       if (speed <= 0.1) speed = s.motorSpeedKn, motor = true;
+      if (side == 0) {
+        // Direct course (sailing or engine): steer into the current.
+        const double sp = motor ? s.motorSpeedKn : speed;
+        speed = sp;
+        heading = std::fmod(
+            brg - std::asin(std::clamp(crossC / sp, -1.0, 1.0)) / kDeg + 360,
+            360);
+        sog = PassagePlanner::groundSpeed(sp, alongC, crossC);
+        moveDir = unit(brg);
+        len = std::min(dist, kStepNm);
+      }
 
       SailBoard bd;
       bd.leg = leg - 1;
       bd.from = here;
-      const QPointF P2 = P + unit(heading) * len;
+      const QPointF P2 = P + moveDir * len;
       bd.to = loc.from(P2);
       bd.start = t;
-      t = t.addSecs(qint64(std::round(len / speed * 3600)));
+      t = t.addSecs(qint64(std::round(len / sog * 3600)));
       bd.end = t;
       bd.headingDeg = heading;
       bd.distanceNm = len;
       bd.speedKn = speed;
+      bd.sogKn = sog;
+      bd.cogDeg = headingOf(moveDir);
+      bd.currentSetDeg = cset;
+      bd.currentDriftKn = cdrift;
       bd.tws = kn;
       bd.twd = from;
       bd.twa = norm180(from - heading);
@@ -517,6 +571,8 @@ SailingPlan SailPlanner::plan(const QVector<QPointF>& route,
         prev->end = bd.end;
         prev->speedKn = (prev->speedKn * prev->distanceNm + speed * len) /
                         (prev->distanceNm + len);
+        prev->sogKn = (prev->sogKn * prev->distanceNm + sog * len) /
+                      (prev->distanceNm + len);
         prev->distanceNm += len;
         out.track.last() = bd.to;
       } else {

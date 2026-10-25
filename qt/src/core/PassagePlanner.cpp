@@ -60,6 +60,15 @@ bool isNight(double lat, double lon, const QDateTime& t) {
 }
 }  // namespace
 
+double PassagePlanner::groundSpeed(double boatKn, double alongKn,
+                                   double crossKn) {
+  // The boat steers into the cross current; if it cannot compensate it,
+  // only the along component helps (it drifts off the course line).
+  const double rest = boatKn * boatKn - crossKn * crossKn;
+  const double sog = rest > 0 ? alongKn + std::sqrt(rest) : alongKn;
+  return std::max(0.3, sog);
+}
+
 double PassagePlanner::boatSpeed(const PassageSettings& s, double windKn,
                                  double twaDeg) {
   if (s.polar && s.polar->isValid()) return s.polar->speedAt(windKn, twaDeg);
@@ -76,10 +85,12 @@ double PassagePlanner::boatSpeed(const PassageSettings& s, double windKn,
 
 PassagePlan PassagePlanner::plan(const QVector<QPointF>& route,
                                  const PassageSettings& s,
-                                 const WindSource& wind) {
+                                 const WindSource& wind,
+                                 const CurrentSource& current) {
   PassagePlan p;
   p.departure = s.departure.toUTC();
   QDateTime t = p.departure;
+  double stillH = 0;  // the same passage without current
   for (int i = 1; i < route.size(); ++i) {
     const QPointF a = route[i - 1], b = route[i];
     PassageLeg leg;
@@ -113,6 +124,23 @@ PassagePlan PassagePlanner::plan(const QVector<QPointF>& route,
         leg.gribWind = grib;
       }
 
+      // Current over this segment: along (+ = with us) and across.
+      double along = 0, cross = 0;
+      double cset = 0, cdrift = 0;
+      if (current && current(lat, lon, t, cset, cdrift) && cdrift > 0) {
+        const double rel = (cset - leg.courseDeg) * kDeg;
+        along = cdrift * std::cos(rel);
+        cross = cdrift * std::sin(rel);
+        p.currentUsed = true;
+        p.maxCurrentKn = std::max(p.maxCurrentKn, cdrift);
+      }
+      if (k == n / 2) {
+        leg.currentSetDeg = cset;
+        leg.currentDriftKn = cdrift;
+      }
+      leg.currentAlongKn += along / n;
+      leg.currentCrossKn += std::abs(cross) / n;
+
       // Under sail: direct, beating to windward or gybing downwind.
       PassageLeg::Mode sailMode = PassageLeg::Mode::Sail;
       double sailed = seg, minor = 0, v = 0;
@@ -132,6 +160,13 @@ PassagePlan PassagePlanner::plan(const QVector<QPointF>& route,
         v = boatSpeed(s, kn, twa);
       }
       const double vmg = v > 0 ? seg / (sailed / v) : 0;
+      // Over ground: direct legs steer into the current, on boards the
+      // cross components of the two tacks cancel.
+      const double vmgGround = v <= 0 ? 0
+                               : sailMode == PassageLeg::Mode::Sail
+                                   ? groundSpeed(v, along, cross)
+                                   : std::max(0.3, vmg + along);
+      const double motorGround = groundSpeed(s.motorSpeedKn, along, cross);
 
       bool motor = false;
       switch (s.strategy) {
@@ -139,19 +174,21 @@ PassagePlan PassagePlanner::plan(const QVector<QPointF>& route,
           motor = true;
           break;
         case PassageSettings::Strategy::MotorSail:
-          motor = vmg < s.motorSpeedKn || kn < s.minSailWindKn;
+          motor = vmgGround < motorGround || kn < s.minSailWindKn;
           break;
         case PassageSettings::Strategy::Sail:
-          motor = kn < s.minSailWindKn || vmg < s.minSailSpeedKn;
+          motor = kn < s.minSailWindKn || vmgGround < s.minSailSpeedKn;
           break;
       }
       double h;
       if (motor) {
-        h = seg / s.motorSpeedKn;
+        h = seg / motorGround;
+        stillH += seg / s.motorSpeedKn;
         leg.motorHours += h;
         leg.sailedNm += seg;
       } else {
-        h = sailed / v;
+        h = seg / vmgGround;
+        stillH += seg / vmg;
         leg.sailedNm += sailed;
         if (sailMode == PassageLeg::Mode::Beat) {
           beatNm += sailed;
@@ -182,6 +219,7 @@ PassagePlan PassagePlanner::plan(const QVector<QPointF>& route,
                : best == runH         ? PassageLeg::Mode::Run
                                       : PassageLeg::Mode::Sail;
     leg.speedKn = leg.hours > 0 ? leg.sailedNm / leg.hours : 0;
+    leg.sogKn = leg.hours > 0 ? leg.distanceNm / leg.hours : 0;
     leg.end = t;
 
     p.distanceNm += leg.distanceNm;
@@ -197,6 +235,7 @@ PassagePlan PassagePlanner::plan(const QVector<QPointF>& route,
     p.legs << leg;
   }
   p.arrival = t;
+  p.currentGainH = p.currentUsed ? stillH - p.hours : 0;
   p.sailHours = p.hours - p.motorHours;
   p.fuelLiters = p.motorHours * s.fuelLph;
 
@@ -212,29 +251,57 @@ PassagePlan PassagePlanner::plan(const QVector<QPointF>& route,
   if (p.maxWindKn >= 30)
     p.warnings << tr("Gale force wind (%1 kn) on the way")
                       .arg(int(std::round(p.maxWindKn)));
+  if (p.maxCurrentKn >= 2.5)
+    p.warnings << tr("Strong current on the way: %1 kn")
+                      .arg(p.maxCurrentKn, 0, 'f', 1);
+
+  // Water levels for tidal harbours, bars and bridges.
+  if (s.levelAt && !route.isEmpty()) {
+    p.departureLevelM =
+        s.levelAt(route.first().y(), route.first().x(), p.departure);
+    p.arrivalLevelM = s.levelAt(route.last().y(), route.last().x(), p.arrival);
+    if (!std::isnan(s.minDepartureLevelM) && !std::isnan(p.departureLevelM) &&
+        p.departureLevelM < s.minDepartureLevelM) {
+      p.levelOk = false;
+      p.warnings << tr("Water level at departure %1 m, %2 m needed")
+                        .arg(p.departureLevelM, 0, 'f', 1)
+                        .arg(s.minDepartureLevelM, 0, 'f', 1);
+    }
+    if (!std::isnan(s.minArrivalLevelM) && !std::isnan(p.arrivalLevelM) &&
+        p.arrivalLevelM < s.minArrivalLevelM) {
+      p.levelOk = false;
+      p.warnings << tr("Water level at arrival %1 m, %2 m needed")
+                        .arg(p.arrivalLevelM, 0, 'f', 1)
+                        .arg(s.minArrivalLevelM, 0, 'f', 1);
+    }
+  }
   return p;
 }
 
 PassagePlan PassagePlanner::planWindow(const QVector<QPointF>& route,
                                        const PassageSettings& s,
                                        const WindSource& wind,
-                                       QVector<DepartureOption>* options) {
+                                       QVector<DepartureOption>* options,
+                                       const CurrentSource& current) {
   if (options) options->clear();
   if (!s.latestDeparture.isValid() || s.latestDeparture <= s.departure) {
-    PassagePlan p = plan(route, s, wind);
+    PassagePlan p = plan(route, s, wind, current);
     if (options)
       *options << DepartureOption{p.departure,  p.hours, p.sailShare(),
-                                  p.nightHours, p.tacks, true};
+                                  p.nightHours, p.tacks, true,
+                                  p.levelOk};
     return p;
   }
   const auto score = [&s](const PassagePlan& p) {
+    // A departure that misses the water level comes last.
+    const double penalty = p.levelOk ? 0 : 1e6;
     switch (s.optimize) {
       case PassageSettings::Optimize::Sailing:
-        return -p.sailShare() * 10 + p.hours * 0.05;
+        return penalty - p.sailShare() * 10 + p.hours * 0.05;
       case PassageSettings::Optimize::Daylight:
-        return p.nightHours * 10 + p.hours;
+        return penalty + p.nightHours * 10 + p.hours;
       default:
-        return p.hours + p.motorHours * 0.01;
+        return penalty + p.hours + p.motorHours * 0.01;
     }
   };
   PassagePlan best;
@@ -246,10 +313,11 @@ PassagePlan PassagePlanner::planWindow(const QVector<QPointF>& route,
   for (QDateTime d = s.departure; d <= s.latestDeparture && i < 200;
        d = d.addSecs(step), ++i) {
     cur.departure = d;
-    PassagePlan p = plan(route, cur, wind);
+    PassagePlan p = plan(route, cur, wind, current);
     if (options)
       *options << DepartureOption{p.departure,  p.hours, p.sailShare(),
-                                  p.nightHours, p.tacks, false};
+                                  p.nightHours, p.tacks, false,
+                                  p.levelOk};
     const double sc = score(p);
     if (sc < bestScore - 1e-9) {
       bestScore = sc;

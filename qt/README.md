@@ -32,8 +32,8 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Gezeiten](doc/screenshot-tides.png) | ![Route](doc/screenshot-night.png) |
 | **Routenplanung von Hafen zu Hafen** | **Törnplanung: Kreuzen, Zeitfenster** |
 | ![Routenplanung](doc/screenshot-route-planning.png) | ![Törn](doc/screenshot-passage.png) |
-| **Segelplan: Schläge, Wenden, Segel und Trimm** | |
-| ![Segelplan](doc/screenshot-sailplan.png) | |
+| **Segelplan: Schläge, Wenden, Segel und Trimm** | **Gezeiten und Strömung in der Planung** |
+| ![Segelplan](doc/screenshot-sailplan.png) | ![Strömung](doc/screenshot-currents.png) |
 | **Bordsysteme · Nachtfahrt** | **Automation „Winter-Duschen“** |
 | ![Boot](doc/screenshot-boat.png) | ![Automation](doc/screenshot-automation.png) |
 | **Etappen: Weg auf der Karte, Diagramme** | **Logbuch: Tagesbericht** |
@@ -72,6 +72,7 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Törnplanung**: Zeitfenster, Segel-/Motoranteil, Wenden/Halsen, Dauer, Ankunft, Diesel, Tageslicht (GRIB-Wind) | ✅ |
 | **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
 | **Segelplan**: Schläge mit Wendepositionen in einer Gasse um die Route (landfrei), Segelführung und Trimm je Schlag, Segelwechsel, Wenden als Wegpunkte | ✅ |
+| **Gezeiten und Strömung in der Törnplanung**: Flüsse und Kanäle (OSM-Fließrichtung), Gezeitenstromstationen, Seevorhersage (Open-Meteo), Pegel (PEGELONLINE), Mindestwasserstand bei Abfahrt/Ankunft | ✅ |
 | **Polardaten**: Import (.pol/.csv/Expedition), Tabelleneditor, Diagramm, optimale Kreuz-/Vorwindwinkel | ✅ |
 | **Wettermodelle vergleichen** (ICON, GFS, ECMWF, Météo-France, GRIB, manuell) × Abfahrtszeiten | ✅ |
 | **Bordsysteme**: Kabinen-Layout, Temperaturen, Tanks, Victron, Webasto, Warmwasser, Licht-Szenen, Verbraucher (simuliert, Signal K folgt) | ✅ |
@@ -511,6 +512,51 @@ Tiefen, Fahrwasser, Sperrgebiete und Brücken werden dabei **nicht**
 berücksichtigt. Die Route ist ein Vorschlag und muss vor der Fahrt auf der
 Seekarte geprüft werden.
 
+#### Gezeiten und Strömung – binnen und auf See
+
+Der Abschnitt **Gezeiten & Strömung** im Törnplaner rechnet Strömung und
+Wasserstand in die Planung ein:
+
+* **Strömung** (Automatisch, Manuell oder Aus). Automatisch nimmt je Ort
+  und Zeit die erste passende Quelle:
+  1. **Flüsse und Kanäle** aus OpenStreetMap entlang der Route. Die
+     Fließrichtung ergibt sich aus der Zeichenrichtung der Wege (immer zu
+     Tal), die Geschwindigkeit aus einer Tabelle typischer Werte (Rhein
+     3 kn, Donau 2,5, Elbe 1,6, Weser 1,2, Main/Mosel/Neckar 0,6,
+     Havel/Spree 0,3, Kanäle 0, sonst 1 kn). Jeder Fluss ist in der Liste
+     darunter einstellbar, z. B. bei Hochwasser. Tidebeeinflusste
+     Abschnitte überlassen die Strömung der Tide.
+  2. **Gezeitenstromstationen** der mitgelieferten Harmonischen, mit Flut-
+     und Ebbrichtung, gemittelt aus bis zu drei Stationen im Umkreis von
+     6 sm. Die Daten decken nur Nordamerika ab.
+  3. Die **Seevorhersage** von Open-Meteo (Gezeiten- und Triftströmung,
+     etwa 8-km-Gitter, 7 Tage) an Punkten alle 4 sm entlang der Route.
+* Gerechnet wird **über Grund**. Auf direkten Kursen hält das Boot gegen
+  den Versatz vor. Beim Kreuzen setzen sich die Schläge aus Bootsfahrt und
+  Strom zusammen, sodass Wenden und Gasse über Grund stimmen. Die
+  Motor/Segel-Entscheidung nutzt ebenfalls die Fahrt über Grund.
+* Ergebnisse: eine Kachel mit **Zeitgewinn bzw. -verlust** durch den Strom
+  und dem stärksten Strom, Strom und Fahrt über Grund je Etappe, Strom,
+  Kurs und Fahrt über Grund je Schlag im Segelplan. Auf der Karte stehen
+  **Strompfeile** entlang der Route, zur Zeit der Durchfahrt; grün heißt
+  mitlaufend, rot gegenan. Ab 2,5 kn erscheint eine Warnung.
+* **Zeitfenster:** Weil die Strömung zur jeweiligen Zeit gilt, wählt das
+  Abfahrtsfenster die Abfahrt mit dem Strom (z. B. nach dem Kentern).
+* **Wasserstand:** Für Abfahrt und Ankunft zeigt der Planer die Höhe über
+  Kartennull an der nächsten Gezeitenstation (bis 15 sm, mit HW/NW).
+  Ohne Station nimmt er den Meeresspiegel der Seevorhersage. Binnen
+  kommen die nächsten **PEGELONLINE-Pegel** (Bundeswasserstraßen) mit
+  aktuellem Wert und MW hinzu. Ein **Mindestwasserstand** bei Abfahrt
+  bzw. Ankunft (Tidehafen, Barre, Brücke) schließt zu niedrige Zeiten im
+  Abfahrtsfenster aus und warnt sonst.
+* „Laden“ lädt Seevorhersage, Flüsse und Pegel (online geschieht das
+  automatisch mit der Route). Alles wird mit der Reise **offline
+  gespeichert**.
+
+Die Werte sind Näherungen: Flussgeschwindigkeiten hängen stark vom
+Wasserstand ab, und das Modellgitter löst enge Fahrwasser nicht auf.
+Amtliche Gezeitenstromatlanten und Pegel gehen vor.
+
 Passen nicht alle Bereiche ins Dock, landen die hinteren unter **Mehr**.
 
 ### Häfen online nachladen
@@ -703,6 +749,9 @@ aktiv.
   Speicherverwaltung für sehr große Kartensätze.
 * Gezeiten: Die binären `.tcd`-Dateien (libtcd) werden noch nicht gelesen;
   die ASCII-Harmonics decken die mitgelieferten Stationen ab.
+* Strömung: Gezeitenstromstationen gibt es in den mitgelieferten Daten nur
+  für Nordamerika; in Europa kommt der Gezeitenstrom aus der
+  Seevorhersage (Open-Meteo), Flussströmungen aus einer Tabelle.
 * GRIB: JPEG-2000- und PNG-gepackte GRIB2-Daten (5.40/5.41) sowie
   Nicht-Lat/Lon-Gitter (z. B. Lambert) werden nicht unterstützt.
 * Plugins: Bestehende wxWidgets-Plugins sind nicht kompatibel. Die neue API
@@ -730,6 +779,7 @@ qt/
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
 │   ├── RoutePlanner       Routing über Wasser (Raster, A*, Begradigung)
 │   ├── PassagePlanner     Törnplanung (Polare, Kreuzen, Zeitfenster, Sonne)
+│   ├── Currents           Strömung (Flüsse, Stromstationen, Seevorhersage), Wasserstand, Pegel
 │   ├── SailPlan           Segelplan: Schläge, Wenden, Segelführung, Trimm
 │   ├── Polar              Polardaten (Formate, Interpolation, VMG)
 │   ├── WeatherModels      Modellvorhersagen entlang der Route (Open-Meteo)

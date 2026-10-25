@@ -141,6 +141,25 @@ std::shared_ptr<TideData> TideDatabase::load(const QString& harmonicsFile,
     const QString l = ix.readLine();
     if (l.isEmpty()) continue;
     const QChar k = l[0];
+    if (k == '^' && pending) {
+      // Current offsets: ^Hmin Hmpy Hoff Lmin Lmpy Loff StaID FloodDir
+      // EbbDir RefFileNum RefName (flood: "high", ebb: "low").
+      const QStringList f = l.mid(1).simplified().split(' ');
+      if (f.size() < 11) continue;
+      pending->highTimeOffMin = f[0].toDouble();
+      pending->highMpy = f[1].toDouble() == 0 ? 1 : f[1].toDouble();
+      pending->highOff = f[2].toDouble();
+      pending->lowTimeOffMin = f[3].toDouble();
+      pending->lowMpy = f[4].toDouble() == 0 ? 1 : f[4].toDouble();
+      pending->lowOff = f[5].toDouble();
+      pending->floodDir = f[7].toDouble();
+      pending->ebbDir = f[8].toDouble();
+      const QString ref = f.mid(10).join(' ');
+      pending->harmonic = byName.value(ref, -1);
+      if (pending->harmonic < 0) d->stations.removeLast();
+      pending = nullptr;
+      continue;
+    }
     if (k == '&' && pending) {
       // &Hmin Hmpy Hoff Lmin Lmpy Loff StaID RefFileNum RefName
       const QStringList f = l.mid(1).simplified().split(' ');
@@ -158,6 +177,11 @@ std::shared_ptr<TideData> TideDatabase::load(const QString& harmonicsFile,
       continue;
     }
     if (k != 'T' && k != 'C' && k != 't' && k != 'c') continue;
+    // A subordinate station without its offsets line is dropped.
+    if (pending) {
+      d->stations.removeLast();
+      pending = nullptr;
+    }
     // "TEur:Ger:: 8.717 53.867 1:0 Cuxhaven, Steubenhoft, Germany"
     const QStringList f = l.simplified().split(' ');
     if (f.size() < 5) continue;
@@ -219,9 +243,14 @@ double TideDatabase::value(const TideData& d, const TideStation& s,
   }
   double v = h.datum + sum;
   if (!s.reference) {
-    const double mpy = (s.highMpy + s.lowMpy) / 2;
-    const double off = (s.highOff + s.lowOff) / 2;
-    v = v * mpy + off;
+    if (h.unit == "kn") {
+      // Currents: flood (+) and ebb (-) have their own factors.
+      v = v >= 0 ? v * s.highMpy + s.highOff : v * s.lowMpy + s.lowOff;
+    } else {
+      const double mpy = (s.highMpy + s.lowMpy) / 2;
+      const double off = (s.highOff + s.lowOff) / 2;
+      v = v * mpy + off;
+    }
   }
   return v * h.toMeters;
 }
