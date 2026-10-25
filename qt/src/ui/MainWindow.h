@@ -22,6 +22,9 @@ class SideDrawer;
 class CockpitView;
 class BoatView;
 class LogView;
+class RadarLayer;
+class RadarView;
+class SonarView;
 class RoutesPage;
 class LightScenesPage;
 class AutomationsPage;
@@ -49,7 +52,7 @@ public:
   ChartView* chart() const { return m_chart; }
   SideDrawer* drawer() const { return m_drawer; }
   void selectAisTarget(quint32 mmsi);
-  enum class View { Cockpit, Chart, Boat, Log };
+  enum class View { Cockpit, Chart, Boat, Log, Radar, Sonar };
   void setView(View v);
   View view() const { return m_view; }
   /** Lets the skipper frame an area for offline OSM data. */
@@ -61,6 +64,9 @@ public:
   AutomationsPage* automationsPage() const { return m_automationsPage; }
   RangePage* rangePage() const { return m_rangePage; }
   LogView* logView() const { return m_log; }
+  RadarView* radarView() const { return m_radar; }
+  SonarView* sonarView() const { return m_sonar; }
+  RadarLayer* radarLayer() const { return m_radarLayer; }
   ProvisionsPage* provisionsPage() const { return m_provisionsPage; }
 
 protected:
@@ -106,5 +112,8 @@ private:
   CockpitView* m_cockpit;
   BoatView* m_boat;
   LogView* m_log;
+  RadarView* m_radar;
+  SonarView* m_sonar;
+  RadarLayer* m_radarLayer;
   View m_view = View::Chart;
 };

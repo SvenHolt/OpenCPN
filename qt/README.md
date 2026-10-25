@@ -38,6 +38,10 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | ![Boot](doc/screenshot-boat.png) | ![Automation](doc/screenshot-automation.png) |
 | **Etappen: Weg auf der Karte, Diagramme** | **Logbuch: Tagesbericht** |
 | ![Etappen](doc/screenshot-legs.png) | ![Logbuch](doc/screenshot-logbook.png) |
+| **Radar (Signal K / Simulator)** | **Radar auf der Karte** |
+| ![Radar](doc/screenshot-radar.png) | ![Radar-Overlay](doc/screenshot-radar-chart.png) |
+| **Sonar: Echogramm** | |
+| ![Sonar](doc/screenshot-sonar.png) | |
 | **Reichweite: Wasser, Fäkalien, Batterie, Diesel** | **Proviant prüfen · Einkaufsliste** |
 | ![Reichweite](doc/screenshot-range.png) | ![Proviant](doc/screenshot-provisions.png) |
 | **Einstellungen (Hauptmenü)** | **Lichtszenen-Editor** |
@@ -67,7 +71,9 @@ Infotainmentsysteme von Tesla, NIO, Xpeng oder BYD:
 | **Plugin-API** (Qt-Plugins) mit **Media-Plugin** (Spotify, YouTube Music) | ✅ |
 | NMEA 0183: RMC, GGA, GLL, VTG, HDT, THS inkl. Checksumme | ✅ |
 | AIS: Typen 1/2/3, 5, 18, 19, 24; CPA/TCPA und Kollisionsalarm | ✅ |
-| Datenquellen: UDP, TCP, seriell, Simulator; Datenmonitor | ✅ |
+| Datenquellen: UDP, TCP, seriell, **Signal K** (WebSocket), Simulator; Datenmonitor | ✅ |
+| **Radar** über Signal K (Radar-API, z. B. Mayara): Radarbild, Ringe, EBL/VRM, AIS, Voraus/Norden oben, Overlay auf der Karte; Simulator | ✅ |
+| **Sonar/Echolot**: Echogramm aus Echodaten (Signal K) oder Tiefe, Tiefe unter Kiel, Wassertemperatur | ✅ |
 | **Routenplanung von Hafen zu Hafen** (automatisch über Wasser, Land und Molen werden umfahren) | ✅ |
 | **Törnplanung**: Zeitfenster, Segel-/Motoranteil, Wenden/Halsen, Dauer, Ankunft, Diesel, Tageslicht (GRIB-Wind) | ✅ |
 | **Häfen online nachladen** (Overpass-Kacheln mit Cache, Nominatim-Suche) | ✅ |
@@ -264,7 +270,9 @@ Heizung, die Batterie reagiert auf Verbraucher, Sonnenstand und Landstrom,
 und Tanks leeren sich. Jeder Wert und jeder Schalter trägt bereits seinen
 Signal-K-Pfad (`environment.inside.<raum>.temperature`,
 `tanks.freshWater.0.currentLevel`, `electrical.switches.<id>.state` …).
-Die Signal-K-Anbindung und die Elektronik folgen später.
+Die Bordsysteme lesen diese Pfade noch nicht von einem Signal-K-Server;
+die Signal-K-Verbindung liefert bisher Navigation, Wind, Tiefe, Motor,
+Radar und Sonar.
 
 ### Etappen und Logbuch (Ansicht „Log“)
 
@@ -308,6 +316,71 @@ Segelanteil, darüber die Summen (Strecke, Stunden, Segelanteil, Diesel).
   (`logbook.json`).
 * „Logbuch exportieren“ schreibt alle Tage mit Daten und Berichten als
   Markdown.
+
+### Signal K
+
+Unter Einstellungen → Datenverbindungen lässt sich ein **Signal-K-Server**
+als Quelle hinzufügen (Host und Port, üblich 3000; Port 443 = TLS). Die App
+abonniert den Delta-Strom des eigenen Schiffs (`/signalk/v1/stream?subscribe=self`)
+und übernimmt:
+
+* Position, Fahrt und Kurs über Grund, Steuerkurs (rechtweisend, sonst
+  missweisend mit Missweisung), Fahrt durchs Wasser, Krängung, Satelliten,
+* scheinbaren und wahren Wind,
+* Tiefe (unter Geber, sonst unter Kiel bzw. unter Oberfläche) und
+  Wassertemperatur,
+* Motordrehzahl, Kühlwassertemperatur, Öldruck, Betriebsstunden,
+  Verbrauch (`propulsion.*`).
+
+Alle Werte rechnen von SI-Einheiten um und laufen wie NMEA-Daten in die
+Navigation. Den WebSocket-Client bringt die App selbst mit; Qt WebSockets
+wird nicht gebraucht. Server mit Zugangsschutz (Token) werden noch nicht
+unterstützt.
+
+### Radar und Sonar (Ansichten „Radar“ und „Sonar“)
+
+Zwei weitere Ansichten im Dock (Tasten `R` und `S`).
+
+**Radar.** Radare liefert ein Signal-K-Server mit der **Radar-API**
+(`/signalk/v2/api/vessels/self/radars`). Ein eigenständiger
+[Mayara](https://github.com/MarineYachtRadar/mayara)-Server
+(`/v2/api/radars`) wird ebenso gefunden. Mayara bindet Radare von Navico,
+Raymarine, Furuno und Garmin ein. Die Spokes kommen als Protobuf
+(`RadarMessage`) über WebSocket; die Farblegende des Servers wird
+übernommen.
+
+* **Radarbild** (PPI): Entfernungsringe mit Abstand, Peilskala, Vorauslinie,
+  **Voraus oben** oder **Norden oben**. Den Steuerkurs liefert das Radar
+  selbst, sonst der Kompass, sonst der Kurs über Grund.
+* **AIS-Ziele** im Radarbild (gefährliche rot).
+* **EBL/VRM:** Ein Tipp ins Bild zeigt Peilung (relativ und rechtweisend)
+  und Abstand; Rechtsklick löscht.
+* **Bereich** 1/8 bis 24 sm (Tasten −/+, Mausrad), Anzeigeverstärkung,
+  Unterdrückung schwacher Echos (Seegang).
+* **Radar auf der Karte:** Das Bild liegt nordausgerichtet um das eigene
+  Schiff auf der Seekarte.
+* Ohne Server zeigt der **Simulator** Echos der Basiskarten-Küste
+  (Küstenlinie, Land, Schatten dahinter), der AIS-Ziele und Seegang nahe
+  am Boot.
+
+Die Bedienung des Radars selbst (Sendebetrieb, Bereich, Gain am Gerät)
+bleibt beim Radar bzw. der Mayara-Oberfläche. Die App zeigt an und zoomt.
+
+**Sonar.** Das Echogramm läuft von rechts (jetzt) nach links über 2, 5, 15
+oder 60 Minuten, mit Tiefenskala, Bodenlinie, Sicherheitstiefe und
+automatischem oder festem Bereich, in Farbe oder Graustufen. Daneben
+stehen die Tiefe (orange unter der Sicherheitstiefe), die Tiefe unter Kiel
+und die Wassertemperatur. Die Daten kommen aus Signal K
+(`environment.depth.*`, `environment.water.temperature`) oder NMEA 0183
+(DPT, DBT, MTW).
+
+Signal K kennt **keinen Standardpfad für Sonar-Rohdaten**. Echowerte werden
+deshalb von einem einstellbaren Pfad gelesen (Vorgabe
+`environment.depth.echogram`), z. B. von einem Plugin:
+`{"range": <m>, "samples": [0..255 oder 0..1, …]}` von der Oberfläche
+abwärts, oder `"data"` als Base64. Ohne Echowerte zeichnet die App das
+Echogramm aus den Tiefenwerten: Bodenecho und auslaufende Rückstreuung,
+ohne erfundene Fischsicheln.
 
 ### Versorgung: Reichweite und Proviant
 
@@ -758,6 +831,10 @@ aktiv.
   ist bisher nur unter Linux/macOS getestet.
 * Media: Unter Windows und macOS gibt es noch keine Systemmediensteuerung;
   dort funktioniert nur die Spotify-Web-API.
+* Signal K: kein Login/Token; die Bordsysteme lesen ihre Signal-K-Pfade
+  noch nicht. Radar nur anzeigen (keine Gerätesteuerung, keine
+  Zielverfolgung/ARPA). Sonar-Rohdaten nur über einen eigenen Pfad, da
+  Signal K dafür keinen Standard hat.
 * Overpass: osm-3s lässt sich nicht unter Windows bauen, dort bleibt Docker
   (HTTP-Backend). Gebiete werden komplett neu importiert, Minutendiffs werden
   nicht eingespielt („Aktualisieren“ lädt das Gebiet neu). Die OSM-Daten
@@ -774,6 +851,9 @@ qt/
 │   ├── NavStore           Eigenschiff, Wind, Motor, Routen, AIS, Zielführung
 │   ├── BoatConfig         Segelkonfiguration, Antrieb, Tank
 │   ├── Connections        UDP/TCP/Seriell/Simulator → NMEA → NavStore
+│   ├── SignalK, WebSocket Signal-K-Server: Deltas → NavStore, Radarliste
+│   ├── Radar              Spokes (Protobuf), Radarbild, Simulator, Dienst
+│   ├── Sonar              Echolot-Verlauf, Echowerte aus Signal K
 │   ├── GpxIO, TrackRecorder
 │   ├── Tides              harmonische Gezeitenvorhersage
 │   ├── Grib, GribDownload GRIB1/2-Decoder, NOAA-GFS-Download
@@ -810,6 +890,8 @@ qt/
 │   ├── BoatPages          Lichtszenen-Editor, Automationen
 │   ├── SupplyPages        Reichweite, Proviant, Proviant prüfen
 │   ├── LogView            Ansicht „Log“: Etappen (Karte, Diagramme), Logbuch
+│   ├── RadarView          Ansicht „Radar“, Radar-Overlay auf der Karte
+│   ├── SonarView          Ansicht „Sonar“: Echogramm
 │   ├── PluginManager
 │   └── MainWindow         Layout, PluginHost-Implementierung
 ├── plugins/media/         Media-Plugin (MPRIS, Spotify-Web-API)

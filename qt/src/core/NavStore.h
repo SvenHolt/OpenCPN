@@ -28,7 +28,9 @@ struct Environment {
   double awa = kNaN, aws = kNaN;              // apparent, deg (+ = stbd), kn
   double twa = kNaN, tws = kNaN, twd = kNaN;  // true
   double stw = kNaN, depth = kNaN;
-  double heel = kNaN;  // deg, + = starboard down
+  double waterTempC = kNaN;
+  QDateTime depthTime;  // last depth reading
+  double heel = kNaN;   // deg, + = starboard down
   QDateTime windTime, trueWindTime;
   bool hasWind() const;
 };

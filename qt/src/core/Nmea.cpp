@@ -159,6 +159,9 @@ bool NmeaParser::parseLine(const QString& raw) {
       if (auto off = optDouble(f[2]); off && *off > 0) *u.depth += *off;
   } else if (type == "DBT" && f.size() >= 5) {
     u.depth = optDouble(f[3]);
+  } else if (type == "MTW" && f.size() >= 3) {
+    if (f[2] != "C") return false;
+    u.waterTempC = optDouble(f[1]);
   } else if (type == "RPM" && f.size() >= 4) {
     if (f[1] != "E") return false;  // shaft RPM is not engine RPM
     u.rpm = optDouble(f[3]);

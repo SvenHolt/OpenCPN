@@ -1,5 +1,5 @@
 // Data connections (UDP, TCP, serial, simulator) feeding NMEA 0183 into the
-// NavStore through a shared parser.
+// NavStore through a shared parser, and Signal K servers (core/SignalK.h).
 #pragma once
 
 #include <QAbstractSocket>
@@ -12,7 +12,7 @@
 #include "core/Nmea.h"
 
 struct ConnectionConfig {
-  enum class Type { Simulator, Udp, Tcp, Serial };
+  enum class Type { Simulator, Udp, Tcp, Serial, SignalK };
   QString id;
   Type type = Type::Udp;
   QString host = QStringLiteral("127.0.0.1");

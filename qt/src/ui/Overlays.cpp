@@ -274,9 +274,10 @@ BottomDock::BottomDock(QWidget* parent) : QWidget(parent) {
   connect(mob, &QAbstractButton::clicked, this, &BottomDock::mobRequested);
   l->addWidget(mob);
   l->addSpacing(10);
-  const char* viewIcons[kViews] = {"gauge", "chart", "boat", "book"};
+  const char* viewIcons[kViews] = {"gauge", "chart", "boat",
+                                   "book",  "radar", "sonar"};
   const QString viewNames[kViews] = {tr("Cockpit"), tr("Chart"), tr("Boat"),
-                                     tr("Log")};
+                                     tr("Log"),     tr("Radar"), tr("Sonar")};
   for (int i = 0; i < kViews; ++i) {
     m_views[i] = new DockButton(viewIcons[i], viewNames[i], this);
     m_views[i]->setCheckable(true);

@@ -72,7 +72,12 @@ void NavStore::applyNavUpdate(const NavUpdate& u) {
   const auto now = QDateTime::currentDateTimeUtc();
   bool envChanged = false;
   if (u.stw) m_env.stw = *u.stw, envChanged = true;
-  if (u.depth) m_env.depth = *u.depth, envChanged = true;
+  if (u.depth) {
+    m_env.depth = *u.depth;
+    m_env.depthTime = now;
+    envChanged = true;
+  }
+  if (u.waterTempC) m_env.waterTempC = *u.waterTempC, envChanged = true;
   if (u.heel) m_env.heel = *u.heel, envChanged = true;
   if (u.twa || u.tws || u.twd) {
     if (u.twa) m_env.twa = *u.twa;

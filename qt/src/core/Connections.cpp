@@ -8,6 +8,7 @@
 #endif
 
 #include "core/NavStore.h"
+#include "core/SignalK.h"
 #include "core/Simulator.h"
 
 QString ConnectionConfig::typeName() const {
@@ -20,6 +21,8 @@ QString ConnectionConfig::typeName() const {
       return QStringLiteral("TCP");
     case Type::Serial:
       return QObject::tr("Serial");
+    case Type::SignalK:
+      return QStringLiteral("Signal K");
   }
   return {};
 }
@@ -34,6 +37,8 @@ QString ConnectionConfig::label() const {
       return QStringLiteral("%1:%2").arg(host).arg(port);
     case Type::Serial:
       return QStringLiteral("%1 @ %2").arg(serialPort).arg(baud);
+    case Type::SignalK:
+      return QStringLiteral("Signal K %1:%2").arg(host).arg(port);
   }
   return {};
 }
@@ -170,6 +175,8 @@ Connection* Connection::create(const ConnectionConfig& cfg, QObject* parent) {
       return new UdpConnection(cfg, parent);
     case ConnectionConfig::Type::Tcp:
       return new TcpConnection(cfg, parent);
+    case ConnectionConfig::Type::SignalK:
+      return new SignalKConnection(cfg, parent);
     case ConnectionConfig::Type::Serial:
 #ifdef OCPN_QT_HAVE_SERIAL
       return new SerialConnection(cfg, parent);

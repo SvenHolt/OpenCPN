@@ -68,6 +68,10 @@ set(OCPN_QT_CORE_SOURCES
   src/core/GpxIO.cpp
   src/core/Shapefile.cpp
   src/core/Connections.cpp
+  src/core/SignalK.cpp
+  src/core/Radar.cpp
+  src/core/Sonar.cpp
+  src/core/WebSocket.cpp
   src/core/Simulator.cpp
   src/core/AppSettings.cpp
   src/core/TrackRecorder.cpp
@@ -137,6 +141,8 @@ add_library(ocpnqt_ui ${OCPN_QT_LIB_TYPE}
   src/ui/BoatPages.cpp
   src/ui/SupplyPages.cpp
   src/ui/LogView.cpp
+  src/ui/RadarView.cpp
+  src/ui/SonarView.cpp
   src/ui/WeatherPage.cpp
   src/ui/CockpitView.cpp
   src/ui/SailPage.cpp
@@ -275,6 +281,10 @@ if(OCPN_QT_BUILD_TESTS)
     target_compile_definitions(ocpnqt_currents_tests PRIVATE
       OCPN_QT_SOURCE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
     add_test(NAME ocpnqt_currents_tests COMMAND ocpnqt_currents_tests)
+    add_executable(ocpnqt_signalk_tests tests/test_signalk.cpp)
+    target_link_libraries(ocpnqt_signalk_tests PRIVATE ocpnqt_core Qt6::Test
+      Qt6::Network)
+    add_test(NAME ocpnqt_signalk_tests COMMAND ocpnqt_signalk_tests)
     add_executable(ocpnqt_legs_tests tests/test_legs.cpp)
     target_link_libraries(ocpnqt_legs_tests PRIVATE ocpnqt_core Qt6::Test)
     add_test(NAME ocpnqt_legs_tests COMMAND ocpnqt_legs_tests)
@@ -301,6 +311,8 @@ if(OCPN_QT_BUILD_TESTS)
       ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(ocpnqt_ui_tests tests/test_ui.cpp)
     target_link_libraries(ocpnqt_ui_tests PRIVATE ocpnqt_ui Qt6::Test)
+    target_compile_definitions(ocpnqt_ui_tests PRIVATE
+      OCPN_QT_SOURCE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data")
     add_test(NAME ocpnqt_ui_tests COMMAND ocpnqt_ui_tests)
     set_tests_properties(ocpnqt_ui_tests PROPERTIES
       ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

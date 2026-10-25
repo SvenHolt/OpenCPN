@@ -8,6 +8,8 @@
 #include "core/AppSettings.h"
 #include "core/Automation.h"
 #include "core/NavStore.h"
+#include "core/Radar.h"
+#include "core/Sonar.h"
 #include "core/osm/Overpass.h"
 #include "ui/BoatPages.h"
 #include "ui/BoatView.h"
@@ -17,6 +19,8 @@
 #include "ui/Icons.h"
 #include "ui/LogView.h"
 #include "ui/OfflinePage.h"
+#include "ui/RadarView.h"
+#include "ui/SonarView.h"
 #include "ui/RoutePlanPanel.h"
 #include "ui/Overlays.h"
 #include "ui/SideDrawer.h"
@@ -48,6 +52,13 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_boat = new BoatView(this);
   m_log = new LogView(this);
   m_log->setLand(m_chart->landData());
+  m_radar = new RadarView(this);
+  m_sonar = new SonarView(this);
+  // Echo history from the start; simulated radar echoes from the coastline.
+  SonarService::instance();
+  if (auto land = m_chart->landData())
+    RadarService::instance().setLand(
+        RadarSimulator::Land(land, &land->detailed));
   m_toast = new Toast(this);
   m_drawer = new SideDrawer(this);
   m_dock = new BottomDock(this);
@@ -74,6 +85,10 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_chart->addLayer(new TideLayer(this));
   addSection("wind", tr("Weather"), new WeatherPage(m_chart));
   m_chart->addLayer(new GribLayer(this));
+  m_radarLayer = new RadarLayer(this);
+  m_chart->addLayer(m_radarLayer);
+  connect(m_radar, &RadarView::displayChanged, this,
+          [this] { m_radarLayer->setDisplay(m_radar->display()); });
   // Supplies: range of water, energy and diesel, provisions.
   auto* supplies = new SettingsHub;
   m_suppliesSection = addSection("basket", tr("Supplies"), supplies);
@@ -148,12 +163,8 @@ MainWindow::MainWindow(std::shared_ptr<const LandData> land, QWidget* parent)
   m_pageKeys.insert("routes", m_routesSection);
 
   connect(m_dock, &BottomDock::sectionRequested, m_drawer, &SideDrawer::toggle);
-  connect(m_dock, &BottomDock::viewRequested, this, [this](int v) {
-    setView(v == 0   ? View::Cockpit
-            : v == 1 ? View::Chart
-            : v == 2 ? View::Boat
-                     : View::Log);
-  });
+  connect(m_dock, &BottomDock::viewRequested, this,
+          [this](int v) { setView(View(v)); });
   connect(m_cockpit, &CockpitView::sailConfigRequested, this,
           [this] { m_drawer->open(m_sailSection); });
   connect(m_cockpit, &CockpitView::routesRequested, this,
@@ -225,10 +236,9 @@ void MainWindow::setView(View v) {
   m_cockpit->setVisible(v == View::Cockpit);
   m_boat->setVisible(v == View::Boat);
   m_log->setVisible(v == View::Log);
-  m_dock->setActiveView(v == View::Cockpit ? 0
-                        : v == View::Chart ? 1
-                        : v == View::Boat  ? 2
-                                           : 3);
+  m_radar->setVisible(v == View::Radar);
+  m_sonar->setVisible(v == View::Sonar);
+  m_dock->setActiveView(int(v));
   layoutOverlays();
 }
 
@@ -305,6 +315,10 @@ void MainWindow::layoutOverlays(bool animate) {
   m_boat->setLeftInset(left);
   m_log->setGeometry(0, 0, w, mapH);
   m_log->setLeftInset(left);
+  m_radar->setGeometry(0, 0, w, mapH);
+  m_radar->setLeftInset(left);
+  m_sonar->setGeometry(0, 0, w, mapH);
+  m_sonar->setLeftInset(left);
 
   m_instruments->resize(m_instruments->sizeHint());
   const QPoint instPos(left + kGap - kShadow, kGap - kShadow);
@@ -389,6 +403,8 @@ void MainWindow::layoutOverlays(bool animate) {
   // The boat view uses the whole screen for its cards.
   if (m_view == View::Boat) m_boat->raise();
   if (m_view == View::Log) m_log->raise();
+  if (m_view == View::Radar) m_radar->raise();
+  if (m_view == View::Sonar) m_sonar->raise();
   m_drawer->raise();
   m_routeBar->raise();
   m_areaBar->raise();
@@ -549,6 +565,12 @@ void MainWindow::keyPressEvent(QKeyEvent* e) {
       break;
     case Qt::Key_L:
       setView(m_view == View::Log ? View::Chart : View::Log);
+      break;
+    case Qt::Key_R:
+      setView(m_view == View::Radar ? View::Chart : View::Radar);
+      break;
+    case Qt::Key_S:
+      setView(m_view == View::Sonar ? View::Chart : View::Sonar);
       break;
     case Qt::Key_F11:
       setWindowState(windowState() ^ Qt::WindowFullScreen);
